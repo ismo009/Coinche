@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="fr">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Coinche - Jeu de Cartes</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@600&display=swap"
+    rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+  <!-- ECRAN D'ACCUEIL -->
+  <div id="lobby" class="screen">
+    <div class="lobby-container">
+      <h1>♠ Coinche ♥</h1>
+      <p class="subtitle">Jeu de cartes multijoueur</p>
+
+      <div class="lobby-form">
+        <input type="text" id="player-name" placeholder="Ton pseudo" maxlength="20" autocomplete="off">
+
+        <div class="lobby-actions">
+          <div class="action-group">
+            <h3>Créer une salle</h3>
+            <select id="create-position">
+              <option value="sud">Sud</option>
+              <option value="nord">Nord</option>
+              <option value="est">Est</option>
+              <option value="ouest">Ouest</option>
+            </select>
+            <button id="btn-create" class="btn btn-primary">Créer</button>
+          </div>
+
+          <div class="separator">ou</div>
+
+          <div class="action-group">
+            <h3>Rejoindre une salle</h3>
+            <input type="text" id="room-code" placeholder="Code salle" maxlength="6" autocomplete="off">
+            <select id="join-position">
+              <option value="" disabled selected>Position...</option>
+              <option value="sud">Sud</option>
+              <option value="nord">Nord</option>
+              <option value="est">Est</option>
+              <option value="ouest">Ouest</option>
+            </select>
+            <button id="btn-join" class="btn btn-secondary">Rejoindre</button>
+          </div>
+        </div>
+      </div>
+
+      <div id="lobby-error" class="error-msg hidden"></div>
+    </div>
+  </div>
+
+  <!-- SALLE D'ATTENTE -->
+  <div id="waiting-room" class="screen hidden">
+    <div class="waiting-container">
+      <h2>Salle: <span id="room-code-display"></span></h2>
+      <p>Partagez ce code avec vos amis !</p>
+      <div class="players-grid">
+        <div class="player-slot" id="slot-nord">
+          <div class="slot-label">Nord</div>
+          <div class="slot-name">En attente...</div>
+        </div>
+        <div class="player-slot" id="slot-ouest">
+          <div class="slot-label">Ouest</div>
+          <div class="slot-name">En attente...</div>
+        </div>
+        <div class="player-slot" id="slot-est">
+          <div class="slot-label">Est</div>
+          <div class="slot-name">En attente...</div>
+        </div>
+        <div class="player-slot" id="slot-sud">
+          <div class="slot-label">Sud</div>
+          <div class="slot-name">En attente...</div>
+        </div>
+      </div>
+      <p class="team-info">
+        <span class="team-ns">Nord ↔ Sud</span> vs <span class="team-eo">Ouest ↔ Est</span>
+      </p>
+    </div>
+  </div>
+
+  <!-- TABLE DE JEU -->
+  <div id="game-table" class="screen hidden">
+    <!-- Scores -->
+    <div id="scoreboard">
+      <div class="score-team">
+        <span class="team-label team-ns">N-S</span>
+        <span id="score-ns">0</span>
+      </div>
+      <div class="score-separator">-</div>
+      <div class="score-team">
+        <span class="team-label team-eo">E-O</span>
+        <span id="score-eo">0</span>
+      </div>
+    </div>
+
+    <!-- Info contrat -->
+    <div id="contract-info" class="hidden">
+      <span id="contract-text"></span>
+    </div>
+
+    <div class="table-side-panel">
+      <div id="last-trick-panel" class="last-trick-panel">
+        <div class="last-trick-title">Dernier pli</div>
+        <div class="last-trick-area">
+          <div class="trick-card trick-north" id="last-trick-nord"></div>
+          <div class="trick-card trick-west" id="last-trick-ouest"></div>
+          <div class="trick-card trick-east" id="last-trick-est"></div>
+          <div class="trick-card trick-south" id="last-trick-sud"></div>
+        </div>
+      </div>
+
+      <div id="round-history-panel" class="round-history-panel">
+        <div class="round-history-title">Historique</div>
+        <div id="round-history-list" class="round-history-list"></div>
+      </div>
+    </div>
+
+    <!-- Zone de jeu avec les 4 joueurs -->
+    <div class="table-layout">
+      <!-- Joueur Nord (en haut) -->
+      <div class="player-area player-north">
+        <div class="player-info">
+          <span class="player-name" id="name-nord">Nord</span>
+          <span class="card-count" id="cards-nord">8</span>
+        </div>
+        <div class="player-cards-back" id="hand-nord"></div>
+      </div>
+
+      <!-- Joueur Ouest (à gauche) -->
+      <div class="player-area player-west">
+        <div class="player-info">
+          <span class="player-name" id="name-ouest">Ouest</span>
+          <span class="card-count" id="cards-ouest">8</span>
+        </div>
+        <div class="player-cards-back" id="hand-ouest"></div>
+      </div>
+
+      <!-- Zone centrale: pli en cours -->
+      <div class="center-area">
+        <div class="trick-area">
+          <div class="trick-card trick-north" id="trick-nord"></div>
+          <div class="trick-card trick-west" id="trick-ouest"></div>
+          <div class="trick-card trick-east" id="trick-est"></div>
+          <div class="trick-card trick-south" id="trick-sud"></div>
+        </div>
+        <div id="turn-indicator"></div>
+      </div>
+
+      <!-- Joueur Est (à droite) -->
+      <div class="player-area player-east">
+        <div class="player-info">
+          <span class="player-name" id="name-est">Est</span>
+          <span class="card-count" id="cards-est">8</span>
+        </div>
+        <div class="player-cards-back" id="hand-est"></div>
+      </div>
+
+      <!-- Ma main (en bas) -->
+      <div class="player-area player-south my-area">
+        <div class="player-info">
+          <span class="player-name" id="name-sud">Moi</span>
+          <span class="card-count" id="cards-sud">8</span>
+        </div>
+        <div id="my-hand" class="my-hand"></div>
+      </div>
+    </div>
+
+    <!-- Points de la manche -->
+    <div id="round-points">
+      <span class="team-ns">NS: <span id="round-ns">0</span></span>
+      <span class="team-eo">EO: <span id="round-eo">0</span></span>
+    </div>
+
+    <!-- Zone d'enchères -->
+    <div id="bidding-panel" class="hidden">
+      <h3>Enchères</h3>
+      <div class="bid-history" id="bid-history"></div>
+      <div class="bid-controls">
+        <div class="bid-row">
+          <select id="bid-points">
+            <option value="80">80</option>
+            <option value="90">90</option>
+            <option value="100">100</option>
+            <option value="110">110</option>
+            <option value="120">120</option>
+            <option value="130">130</option>
+            <option value="140">140</option>
+            <option value="150">150</option>
+            <option value="160">160</option>
+            <option value="250">Capot (250)</option>
+            <option value="400">400</option>
+            <option value="500">Générale (500)</option>
+          </select>
+          <select id="bid-suit">
+            <option value="coeur">♥ Coeur</option>
+            <option value="carreau">♦ Carreau</option>
+            <option value="trefle">♣ Trèfle</option>
+            <option value="pique">♠ Pique</option>
+            <option value="tout-atout">Tout Atout</option>
+            <option value="sans-atout">Sans Atout</option>
+          </select>
+          <button id="btn-bid" class="btn btn-primary btn-sm">Enchérir</button>
+        </div>
+        <div class="bid-row">
+          <button id="btn-pass" class="btn btn-secondary btn-sm">Passer</button>
+          <button id="btn-coinche" class="btn btn-warning btn-sm" disabled>Coincher</button>
+          <button id="btn-surcoinche" class="btn btn-danger btn-sm" disabled>Surcoincher</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Panel fin de manche -->
+    <div id="round-result" class="hidden">
+      <div class="result-content">
+        <h3 id="result-title"></h3>
+        <div id="result-details"></div>
+        <button id="btn-next-round" class="btn btn-primary">Manche suivante</button>
+        <button id="btn-new-game" class="btn btn-primary hidden">Nouvelle partie</button>
+      </div>
+    </div>
+
+    <!-- Messages -->
+    <div id="messages"></div>
+  </div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="game-client.js"></script>
+</body>
+
+</html>
