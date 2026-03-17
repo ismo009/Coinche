@@ -51,6 +51,69 @@ function getAbsToVisual() {
 }
 
 // ---- Card rendering ----
+// Optional: use your own card textures served from /public.
+// Put images under: public/cards/
+// - back: public/cards/back.png
+// - faces: public/cards/<rank>_<suit>.png (example: as_pique.png)
+// Then set enabled=true.
+const CARD_TEXTURES = {
+  enabled: true,
+  baseUrl: '/cards',
+  backFile: 'BACK.png',
+  extension: 'png'
+};
+
+function getCardTextureUrl(card) {
+  // Mapping for the current assets naming convention in public/cards/.
+  // Example: AS_COEUR.png, SEPT_PIC.png, DIX_TREFLE.png
+  const rankMap = {
+    '7': 'SEPT',
+    '8': 'HUIT',
+    '9': 'NEUF',
+    '10': 'DIX',
+    valet: 'VALET',
+    dame: 'DAME',
+    roi: 'ROI',
+    as: 'AS'
+  };
+
+  const suitMap = {
+    coeur: 'COEUR',
+    carreau: 'CARREAU',
+    trefle: 'TREFLE',
+    pique: 'PIC'
+  };
+
+  const rank = rankMap[card.rank] || String(card.rank).toUpperCase();
+  const suit = suitMap[card.suit] || String(card.suit).toUpperCase();
+
+  return `${CARD_TEXTURES.baseUrl}/${rank}_${suit}.${CARD_TEXTURES.extension}`;
+}
+
+function getBackTextureUrl() {
+  return `${CARD_TEXTURES.baseUrl}/${CARD_TEXTURES.backFile}`;
+}
+
+function applyBackTextureCssVar() {
+  if (!CARD_TEXTURES.enabled) return;
+  document.documentElement.style.setProperty('--card-back-image', `url("${getBackTextureUrl()}")`);
+}
+
+function applyCardFaceTexture(el, card) {
+  if (!CARD_TEXTURES.enabled) return;
+
+  const url = getCardTextureUrl(card);
+  el.classList.add('card--textured');
+  el.style.setProperty('--card-face-image', `url("${url}")`);
+
+  // If the image loads, hide the HTML markup to show only the texture.
+  const img = new Image();
+  img.onload = () => el.classList.add('card--texture-loaded');
+  img.src = url;
+}
+
+applyBackTextureCssVar();
+
 const SUIT_SYMBOLS = {
   coeur: '♥', carreau: '♦', trefle: '♣', pique: '♠'
 };
@@ -145,6 +208,8 @@ function createCardElement(card, playable = false) {
     });
   }
 
+  applyCardFaceTexture(div, card);
+
   return div;
 }
 
@@ -164,13 +229,16 @@ function createTrickCard(card) {
     <span class="card-rank">${rank}</span>
     <span class="card-corner-bottom">${rank}<br>${suit}</span>
   `;
+
+  applyCardFaceTexture(div, card);
   return div;
 }
 
 function createCardBacks(count) {
   let html = '';
+  const texturedClass = CARD_TEXTURES.enabled ? ' card-back--textured' : '';
   for (let i = 0; i < count; i++) {
-    html += '<div class="card-back"></div>';
+    html += `<div class="card-back${texturedClass}"></div>`;
   }
   return html;
 }
