@@ -401,6 +401,7 @@ class CoincheGame {
 
     // Historique
     this.lastTrick = null;
+    this.lastTrickWinner = null;
     this.roundHistory = [];
     this.roundNumber = 0;
   }
@@ -450,6 +451,7 @@ class CoincheGame {
     this.beloteAnnounced = { ns: {}, eo: {} };
     this.belotePlayers = {};
     this.lastTrick = null;
+    this.lastTrickWinner = null;
 
     // Le joueur après le donneur commence les enchères
     this.currentPlayer = getNextPlayer(this.dealer);
@@ -628,6 +630,7 @@ class CoincheGame {
       }
 
       this.lastTrick = [...this.currentTrick];
+      this.lastTrickWinner = winner;
       this.currentTrick = [];
       this.trickNumber++;
 
@@ -797,6 +800,7 @@ class CoincheGame {
       myTeam: getTeam(position),
       currentTrick: this.currentTrick,
       lastTrick: this.lastTrick,
+      lastTrickWinner: this.lastTrickWinner,
       roundHistory: this.roundHistory,
       bids: this.bids,
       roundPoints: this.roundPoints,
