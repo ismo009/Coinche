@@ -188,50 +188,87 @@ body {
    ============================================================ */
 
 #lobby {
-  background: var(--bg-dark);
+  position: relative;
+  isolation: isolate;
+  background:
+    radial-gradient(circle at 18% 16%, rgba(251, 244, 220, 0.45) 0%, rgba(251, 244, 220, 0) 42%),
+    radial-gradient(circle at 86% 84%, rgba(186, 216, 156, 0.38) 0%, rgba(186, 216, 156, 0) 40%),
+    linear-gradient(145deg, #e8f1d3 0%, #c7dfac 38%, #b5d492 70%, #d6e8ba 100%);
+}
+
+#lobby::before,
+#lobby::after {
+  content: '';
+  position: absolute;
+  pointer-events: none;
+  z-index: -1;
+}
+
+#lobby::before {
+  inset: 0;
   background-image:
-    radial-gradient(ellipse at 30% 20%, rgba(212, 168, 67, 0.04) 0%, transparent 50%),
-    radial-gradient(ellipse at 70% 80%, rgba(62, 207, 207, 0.03) 0%, transparent 50%);
+    linear-gradient(120deg, rgba(47, 85, 46, 0.06) 0%, rgba(47, 85, 46, 0) 35%),
+    repeating-linear-gradient(35deg, rgba(255, 255, 255, 0.08) 0 10px, rgba(255, 255, 255, 0.02) 10px 20px);
+}
+
+#lobby::after {
+  width: min(46vw, 560px);
+  height: min(46vw, 560px);
+  right: -110px;
+  top: -130px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 35%, rgba(71, 120, 65, 0.28), rgba(71, 120, 65, 0));
+  filter: blur(2px);
+  animation: lobby-drift 7s ease-in-out infinite alternate;
 }
 
 .lobby-container {
   text-align: center;
-  padding: 50px 40px;
+  padding: 46px 40px 38px;
   max-width: 540px;
   width: 92%;
+  border-radius: 30px;
+  background:
+    linear-gradient(180deg, rgba(255, 254, 247, 0.93) 0%, rgba(245, 250, 231, 0.92) 100%);
+  border: 1px solid rgba(67, 112, 57, 0.18);
+  box-shadow:
+    0 32px 70px rgba(48, 78, 43, 0.25),
+    inset 0 1px 0 rgba(255, 255, 255, 0.6);
+  backdrop-filter: blur(2px);
 }
 
 .lobby-container h1 {
-  font-family: var(--font-display);
-  font-size: 3.5em;
+  font-family: 'Playfair Display', Georgia, serif;
+  font-size: clamp(2.5rem, 5vw, 3.8rem);
   font-weight: 900;
-  margin-bottom: 4px;
-  background: linear-gradient(135deg, var(--gold-light), var(--gold), #a07828);
+  margin-bottom: 8px;
+  letter-spacing: 0.02em;
+  background: linear-gradient(165deg, #2f5f31 0%, #4a8546 48%, #6ea45f 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
   text-shadow: none;
-  filter: drop-shadow(0 2px 8px rgba(212, 168, 67, 0.3));
+  filter: drop-shadow(0 3px 10px rgba(51, 93, 48, 0.22));
 }
 
 .subtitle {
-  color: var(--text-muted);
-  margin-bottom: 36px;
-  font-size: 14px;
-  letter-spacing: 3px;
+  color: #44603f;
+  margin-bottom: 30px;
+  font-size: 13px;
+  letter-spacing: 2.6px;
   text-transform: uppercase;
-  font-weight: 500;
+  font-weight: 700;
 }
 
 .lobby-form input,
 .lobby-form select {
   width: 100%;
-  padding: 14px 16px;
+  padding: 13px 15px;
   margin-bottom: 14px;
-  border: 1.5px solid rgba(255, 255, 255, 0.06);
-  border-radius: var(--radius-md);
-  background: var(--bg-medium);
-  color: var(--text);
+  border: 1.5px solid rgba(80, 124, 64, 0.26);
+  border-radius: 14px;
+  background: rgba(255, 255, 250, 0.92);
+  color: #28422b;
   font-family: var(--font-body);
   font-size: 14px;
   transition: all var(--transition);
@@ -240,59 +277,104 @@ body {
 .lobby-form input:focus,
 .lobby-form select:focus {
   outline: none;
-  border-color: var(--gold);
-  box-shadow: 0 0 0 3px var(--gold-dim);
+  border-color: #508941;
+  box-shadow: 0 0 0 3px rgba(123, 173, 102, 0.3);
 }
 
 .lobby-form input::placeholder {
-  color: var(--text-dim);
+  color: #789176;
 }
 
 .lobby-actions {
   display: flex;
   gap: 16px;
-  margin-top: 24px;
+  margin-top: 20px;
   align-items: stretch;
 }
 
 .action-group {
   flex: 1;
-  background: var(--bg-medium);
-  padding: 24px 20px;
+  background: linear-gradient(180deg, rgba(254, 255, 245, 0.9), rgba(238, 248, 224, 0.85));
+  padding: 20px 18px;
   border-radius: var(--radius-lg);
-  border: 1px solid rgba(255, 255, 255, 0.04);
-  transition: border-color var(--transition);
+  border: 1px solid rgba(70, 116, 57, 0.2);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.55);
+  transition: transform var(--transition), border-color var(--transition), box-shadow var(--transition);
 }
 
 .action-group:hover {
-  border-color: rgba(255, 255, 255, 0.08);
+  transform: translateY(-2px);
+  border-color: rgba(70, 116, 57, 0.36);
+  box-shadow: 0 8px 24px rgba(62, 104, 56, 0.14);
 }
 
 .action-group h3 {
   margin-bottom: 14px;
   font-size: 12px;
-  color: var(--text-muted);
+  color: #4a6642;
   text-transform: uppercase;
   letter-spacing: 1.5px;
-  font-weight: 600;
+  font-weight: 700;
 }
 
 .separator {
   display: flex;
   align-items: center;
-  color: var(--text-dim);
+  color: #5f7b55;
   font-weight: 700;
-  font-size: 13px;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  background: rgba(255, 255, 255, 0.6);
+  border: 1px solid rgba(70, 116, 57, 0.18);
+  padding: 0 12px;
+  border-radius: 999px;
+}
+
+#lobby .btn {
+  width: 100%;
+  border-radius: 12px;
+  border: 1px solid transparent;
+}
+
+#lobby .btn-primary {
+  background: linear-gradient(135deg, #3f7a3d 0%, #5e9f50 100%);
+  color: #f7ffef;
+  box-shadow: 0 8px 18px rgba(54, 97, 47, 0.25);
+}
+
+#lobby .btn-primary:hover:not(:disabled) {
+  box-shadow: 0 10px 22px rgba(54, 97, 47, 0.32);
+}
+
+#lobby .btn-secondary {
+  background: linear-gradient(135deg, #e9f4db 0%, #d5e8bf 100%);
+  border-color: rgba(70, 116, 57, 0.28);
+  color: #2b4729;
+}
+
+#lobby .btn-secondary:hover:not(:disabled) {
+  border-color: rgba(70, 116, 57, 0.42);
 }
 
 .error-msg {
-  color: var(--accent-light);
+  color: #7b2f2f;
   margin-top: 16px;
   padding: 12px 16px;
-  background: rgba(192, 57, 43, 0.12);
+  background: rgba(222, 117, 98, 0.13);
   border-radius: var(--radius-md);
-  border: 1px solid rgba(192, 57, 43, 0.2);
+  border: 1px solid rgba(179, 81, 65, 0.3);
   font-size: 13px;
+}
+
+@keyframes lobby-drift {
+  from {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+
+  to {
+    transform: translate3d(-26px, 22px, 0) scale(1.06);
+  }
 }
 
 /* ============================================================
