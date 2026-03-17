@@ -522,7 +522,7 @@ class CoincheGame {
     if (bid.type === 'bid') {
       if (this.coincheBy) return { success: false, error: 'Enchère coinchée, vous pouvez seulement passer ou surcoincher' };
 
-      const validPoints = [80, 90, 100, 110, 120, 130, 140, 150, 160, 250, 400, 500];
+      const validPoints = [80, 90, 100, 110, 120, 130, 140, 150, 160, 250, 270, 500];
       if (!validPoints.includes(bid.points)) {
         return { success: false, error: 'Nombre de points invalide' };
       }
@@ -672,9 +672,16 @@ class CoincheGame {
 
     let contractMet = contractPoints >= this.contract.points;
 
-    // Capot: si contrat de 250 (capot), il faut tous les plis
+    // Capot: il faut tous les plis de l'équipe
     if (this.contract.points === 250) {
       contractMet = this.tricksTaken[defenseTeam].length === 0;
+    }
+
+    // Capot beloté (270): tous les plis + belote/rebelote de l'attaque
+    if (this.contract.points === 270) {
+      const tookAllTricks = this.tricksTaken[defenseTeam].length === 0;
+      const hasBelote = Object.values(this.beloteAnnounced[contractTeam]).some(v => v === 'rebelote');
+      contractMet = tookAllTricks && hasBelote;
     }
 
     // Générale: 500 points
@@ -697,6 +704,9 @@ class CoincheGame {
       if (contractTeam === 'ns') {
         if (this.contract.points === 250 || this.contract.points === 500) {
           scoreNS = contractBonus + belotePoints.ns;
+        } else if (this.contract.points === 270) {
+          // Capot beloté: 270 inclut déjà la belote
+          scoreNS = contractBonus;
         } else {
           scoreNS = contractPoints + contractBonus;
         }
@@ -704,6 +714,9 @@ class CoincheGame {
       } else {
         if (this.contract.points === 250 || this.contract.points === 500) {
           scoreEO = contractBonus + belotePoints.eo;
+        } else if (this.contract.points === 270) {
+          // Capot beloté: 270 inclut déjà la belote
+          scoreEO = contractBonus;
         } else {
           scoreEO = contractPoints + contractBonus;
         }
