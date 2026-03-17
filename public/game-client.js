@@ -68,6 +68,13 @@ function getCardColor(suit) {
   return (suit === 'coeur' || suit === 'carreau') ? 'red' : 'black';
 }
 
+function formatBidPoints(points) {
+  if (points === 270) return 'Capot beloté (270)';
+  if (points === 250) return 'Capot (250)';
+  if (points === 500) return 'Générale (500)';
+  return `${points}`;
+}
+
 function getFaceFigureMarkup(card) {
   const figureMap = {
     valet: {
@@ -405,7 +412,7 @@ function updateRoundHistory() {
         <span class="history-entry-status ${statusClass}">${entry.contractMet ? 'réussi' : 'chuté'}</span>
       </div>
       <div class="history-entry-details">
-        Contrat: <strong>${entry.contract.points} ${suitNames[entry.contract.suit] || entry.contract.suit}</strong><br>
+        Contrat: <strong>${formatBidPoints(entry.contract.points)} ${suitNames[entry.contract.suit] || entry.contract.suit}</strong><br>
         Manche: NS <strong>${entry.scoreNS}</strong> - EO <strong>${entry.scoreEO}</strong><br>
         Total: NS <strong>${entry.totalScores.ns}</strong> - EO <strong>${entry.totalScores.eo}</strong>
       </div>
@@ -470,7 +477,7 @@ function updateBidding() {
         div.innerHTML = `<strong>${name}</strong> SURCOINCHE !`;
       } else if (bid.type === 'bid') {
         div.className = 'bid-entry';
-        div.innerHTML = `<strong>${name}</strong> ${bid.points} ${suitNames[bid.suit] || bid.suit}`;
+        div.innerHTML = `<strong>${name}</strong> ${formatBidPoints(bid.points)} ${suitNames[bid.suit] || bid.suit}`;
       }
       history.appendChild(div);
     }
@@ -504,10 +511,9 @@ function updateBidding() {
 
   // Update minimum bid
   if (gameState.contract) {
-    const minBid = gameState.contract.points + 10;
     for (const opt of pointsSelect.options) {
       const val = parseInt(opt.value);
-      opt.disabled = val <= gameState.contract.points && val < 250;
+      opt.disabled = val <= gameState.contract.points;
     }
     if (pointsSelect.selectedOptions[0] && pointsSelect.selectedOptions[0].disabled) {
       const firstValid = Array.from(pointsSelect.options).find(o => !o.disabled);
@@ -534,7 +540,7 @@ function updateContract() {
       coeur: '♥ Coeur', carreau: '♦ Carreau', trefle: '♣ Trèfle',
       pique: '♠ Pique', 'tout-atout': 'Tout Atout', 'sans-atout': 'Sans Atout'
     };
-    let text = `Contrat: ${gameState.contract.points} ${suitNames[gameState.contract.suit]}`;
+    let text = `Contrat: ${formatBidPoints(gameState.contract.points)} ${suitNames[gameState.contract.suit]}`;
     if (gameState.contract.coinched) text += ' (COINCHÉ)';
     if (gameState.contract.surcoinched) text += ' (SURCOINCÉ)';
     el.querySelector('#contract-text').textContent = text;
