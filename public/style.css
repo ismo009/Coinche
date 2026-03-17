@@ -239,7 +239,7 @@ body {
 
 .lobby-container h1 {
   font-family: 'Playfair Display', Georgia, serif;
-  font-size: clamp(2.5rem, 5vw, 3.8rem);
+  font-size: clamp(2.3rem, 4.4vw, 3.3rem);
   font-weight: 900;
   margin-bottom: 8px;
   letter-spacing: 0.02em;
@@ -1612,7 +1612,7 @@ body {
   }
 
   .lobby-container h1 {
-    font-size: 2.5em;
+    font-size: 2.2em;
   }
 
   .table-layout {
