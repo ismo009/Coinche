@@ -40,6 +40,9 @@
   --card-red: #c0392b;
   --card-black: #1a1a2e;
 
+  /* Optional textures (set by JS when enabled) */
+  --card-back-image: none;
+
   /* Table */
   --felt-center: #2a6e3f;
   --felt-mid: #1f5a30;
@@ -635,6 +638,20 @@ body {
   position: relative;
 }
 
+.card-back.card-back--textured {
+  background-image:
+    var(--card-back-image, none),
+    repeating-linear-gradient(45deg,
+      transparent,
+      transparent 3px,
+      rgba(255, 255, 255, 0.05) 3px,
+      rgba(255, 255, 255, 0.05) 6px),
+    linear-gradient(135deg, #8b1a1a, #a82020, #c62828, #a82020, #8b1a1a);
+  background-size: cover, auto, auto;
+  background-position: center, center, center;
+  background-repeat: no-repeat, repeat, no-repeat;
+}
+
 .card-back::after {
   content: '';
   position: absolute;
@@ -856,6 +873,23 @@ body {
   background-image:
     linear-gradient(135deg, rgba(255, 255, 255, 0.5) 0%, transparent 50%, rgba(0, 0, 0, 0.02) 100%);
   background-color: var(--card-bg);
+}
+
+.card.card--textured {
+  background-image:
+    var(--card-face-image, none),
+    linear-gradient(135deg, rgba(255, 255, 255, 0.5) 0%, transparent 50%, rgba(0, 0, 0, 0.02) 100%);
+  background-size: cover, auto;
+  background-position: center, center;
+  background-repeat: no-repeat, no-repeat;
+}
+
+.card.card--textured.card--texture-loaded .card-corner,
+.card.card--textured.card--texture-loaded .card-corner-bottom,
+.card.card--textured.card--texture-loaded .card-suit-icon,
+.card.card--textured.card--texture-loaded .card-rank,
+.card.card--textured.card--texture-loaded .card-figure {
+  display: none;
 }
 
 .card .card-rank {
