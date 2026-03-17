@@ -679,7 +679,10 @@ class CoincheGame {
 
     // Générale: 500 points
     if (this.contract.points === 500) {
-      contractMet = this.tricksTaken[defenseTeam].length === 0;
+      const attackTricks = this.tricksTaken[contractTeam];
+      const bidderTookAll = attackTricks.length === 8 &&
+        attackTricks.every(trick => determineTrickWinner(trick, this.contract.suit) === this.contract.player);
+      contractMet = bidderTookAll;
     }
 
     let scoreNS = 0;
