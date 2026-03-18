@@ -1278,6 +1278,115 @@ body {
   font-family: var(--font-mono);
 }
 
+/* ---- Chat panel ---- */
+#chat-panel {
+  position: fixed;
+  right: 14px;
+  bottom: 14px;
+  width: 290px;
+  height: 240px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  background: var(--bg-card-panel);
+  border-radius: var(--radius-lg);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  box-shadow: var(--shadow-lg);
+  backdrop-filter: blur(10px);
+  z-index: 17;
+}
+
+.chat-header {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--text-muted);
+}
+
+.chat-messages {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-right: 2px;
+}
+
+.chat-messages::-webkit-scrollbar {
+  width: 4px;
+}
+
+.chat-messages::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.16);
+  border-radius: 2px;
+}
+
+.chat-msg {
+  align-self: flex-start;
+  max-width: 94%;
+  padding: 6px 8px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.chat-msg.mine {
+  align-self: flex-end;
+  background: rgba(62, 207, 207, 0.12);
+  border-color: rgba(62, 207, 207, 0.3);
+}
+
+.chat-author {
+  font-size: 10px;
+  color: var(--text-dim);
+  margin-bottom: 2px;
+  font-weight: 700;
+}
+
+.chat-msg.mine .chat-author {
+  color: var(--team-ns);
+}
+
+.chat-text {
+  font-size: 12px;
+  line-height: 1.35;
+  color: var(--text);
+  word-break: break-word;
+}
+
+.chat-input-row {
+  display: flex;
+  gap: 6px;
+}
+
+#chat-input {
+  flex: 1;
+  min-width: 0;
+  padding: 9px 10px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: var(--bg-medium);
+  color: var(--text);
+  font-family: var(--font-body);
+  font-size: 12px;
+}
+
+#chat-input:focus {
+  outline: none;
+  border-color: var(--gold);
+}
+
+#chat-input::placeholder {
+  color: var(--text-dim);
+}
+
+#btn-chat-send {
+  padding: 8px 10px;
+  min-width: 84px;
+}
+
 /* ============================================================
    BIDDING PANEL
    ============================================================ */
@@ -1541,8 +1650,15 @@ body {
   #messages {
     top: auto;
     right: 10px;
-    bottom: 12px;
+    bottom: 258px;
     width: min(280px, calc(100vw - 20px));
+  }
+
+  #chat-panel {
+    right: 8px;
+    bottom: 8px;
+    width: min(300px, calc(100vw - 16px));
+    height: 232px;
   }
 
   .table-side-panel {
@@ -1617,8 +1733,23 @@ body {
   #messages {
     left: 10px;
     right: 10px;
+    bottom: 216px;
     width: auto;
     max-width: none;
+  }
+
+  #chat-panel {
+    left: 8px;
+    right: 8px;
+    bottom: 8px;
+    width: auto;
+    height: 200px;
+    border-radius: 14px;
+    padding: 8px;
+  }
+
+  #chat-input {
+    font-size: 16px;
   }
 
   .table-side-panel {

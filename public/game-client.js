@@ -37,6 +37,14 @@ const screens = {
   game: document.getElementById('game-table')
 };
 
+const chatElements = {
+  container: document.getElementById('chat-messages'),
+  input: document.getElementById('chat-input'),
+  send: document.getElementById('btn-chat-send')
+};
+
+const CHAT_MAX_MESSAGES = 120;
+
 // Position mapping relative to player's perspective
 function getRelativePosition(pos) {
   // Maps absolute position to visual position on screen (always show "me" at bottom)
@@ -638,6 +646,7 @@ socket.on('room-created', (data) => {
   myRoom = data.roomId;
   myPosition = data.position;
   document.getElementById('room-code-display').textContent = data.roomId;
+  clearChat();
   showScreen('waiting');
 });
 
@@ -645,6 +654,7 @@ socket.on('room-joined', (data) => {
   myRoom = data.roomId;
   myPosition = data.position;
   document.getElementById('room-code-display').textContent = data.roomId;
+  clearChat();
   showScreen('waiting');
 });
 
@@ -654,6 +664,10 @@ socket.on('error-msg', (data) => {
 
 socket.on('message', (data) => {
   addMessage(data.text, data.type);
+});
+
+socket.on('chat-message', (data) => {
+  addChatMessage(data);
 });
 
 // game-state handled below with transition detection
@@ -666,6 +680,46 @@ function addMessage(text, type = 'info') {
   div.textContent = text;
   container.appendChild(div);
   setTimeout(() => div.remove(), 4000);
+}
+
+function clearChat() {
+  if (!chatElements.container) return;
+  chatElements.container.innerHTML = '';
+}
+
+function addChatMessage(data) {
+  if (!chatElements.container || !data) return;
+
+  const row = document.createElement('div');
+  const isMine = data.position && data.position === myPosition;
+  row.className = `chat-msg${isMine ? ' mine' : ''}`;
+
+  const author = document.createElement('div');
+  author.className = 'chat-author';
+  author.textContent = isMine ? 'Moi' : (data.from || 'Joueur');
+
+  const body = document.createElement('div');
+  body.className = 'chat-text';
+  body.textContent = data.text || '';
+
+  row.appendChild(author);
+  row.appendChild(body);
+  chatElements.container.appendChild(row);
+
+  while (chatElements.container.children.length > CHAT_MAX_MESSAGES) {
+    chatElements.container.removeChild(chatElements.container.firstChild);
+  }
+
+  chatElements.container.scrollTop = chatElements.container.scrollHeight;
+}
+
+function sendChatMessage() {
+  if (!chatElements.input) return;
+  const text = chatElements.input.value.replace(/\s+/g, ' ').trim();
+  if (!text) return;
+
+  socket.emit('chat-message', { text });
+  chatElements.input.value = '';
 }
 
 // ---- Game Display ----
@@ -1018,6 +1072,19 @@ document.getElementById('btn-new-game').addEventListener('click', () => {
   socket.emit('new-game');
   document.getElementById('round-result').classList.add('hidden');
 });
+
+if (chatElements.send) {
+  chatElements.send.addEventListener('click', sendChatMessage);
+}
+
+if (chatElements.input) {
+  chatElements.input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      sendChatMessage();
+    }
+  });
+}
 
 // Main game-state listener
 socket.on('game-state', (state) => {
