@@ -865,6 +865,24 @@ body {
   margin-bottom: 8px;
 }
 
+.table-side-panel .last-trick-title,
+.table-side-panel .round-history-title,
+#chat-panel .chat-header,
+#bidding-panel h3 {
+  cursor: grab;
+  user-select: none;
+}
+
+.dragging-panel {
+  opacity: 0.98;
+}
+
+body.panel-dragging,
+body.panel-dragging * {
+  cursor: grabbing !important;
+  user-select: none !important;
+}
+
 .round-history-list {
   display: flex;
   flex-direction: column;

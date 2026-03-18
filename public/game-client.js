@@ -44,6 +44,7 @@ const chatElements = {
 };
 
 const CHAT_MAX_MESSAGES = 120;
+const PANEL_POS_STORAGE_PREFIX = 'coinche-panel-pos:';
 
 // Position mapping relative to player's perspective
 function getRelativePosition(pos) {
@@ -580,6 +581,139 @@ function createCardBacks(count) {
   }
   return html;
 }
+
+// ---- Draggable UI panels ----
+function clampPanelToViewport(panel, left, top) {
+  const maxLeft = Math.max(0, window.innerWidth - panel.offsetWidth);
+  const maxTop = Math.max(0, window.innerHeight - panel.offsetHeight);
+  return {
+    left: Math.min(Math.max(0, left), maxLeft),
+    top: Math.min(Math.max(0, top), maxTop)
+  };
+}
+
+function savePanelPosition(storageKey, left, top) {
+  try {
+    localStorage.setItem(`${PANEL_POS_STORAGE_PREFIX}${storageKey}`, JSON.stringify({ left, top }));
+  } catch {
+    // Ignore storage failures (private mode, quota, etc.)
+  }
+}
+
+function loadPanelPosition(storageKey) {
+  try {
+    const raw = localStorage.getItem(`${PANEL_POS_STORAGE_PREFIX}${storageKey}`);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (typeof parsed.left !== 'number' || typeof parsed.top !== 'number') return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+function applySavedPanelPosition(panel, storageKey) {
+  if (!panel) return;
+  if (window.getComputedStyle(panel).position === 'static') return;
+
+  const saved = loadPanelPosition(storageKey);
+  if (!saved) return;
+
+  panel.style.transform = 'none';
+  panel.style.right = 'auto';
+  panel.style.bottom = 'auto';
+
+  const clamped = clampPanelToViewport(panel, saved.left, saved.top);
+  panel.style.left = `${clamped.left}px`;
+  panel.style.top = `${clamped.top}px`;
+}
+
+function makePanelDraggable(panel, handleSelector, storageKey) {
+  if (!panel) return;
+
+  const handles = panel.querySelectorAll(handleSelector);
+  if (!handles || handles.length === 0) return;
+
+  applySavedPanelPosition(panel, storageKey);
+
+  const startDrag = (e) => {
+    if (e.button !== 0) return;
+    if (window.getComputedStyle(panel).position === 'static') return;
+
+    const rect = panel.getBoundingClientRect();
+    const dragOffsetX = e.clientX - rect.left;
+    const dragOffsetY = e.clientY - rect.top;
+
+    panel.style.transform = 'none';
+    panel.style.right = 'auto';
+    panel.style.bottom = 'auto';
+    panel.style.left = `${rect.left}px`;
+    panel.style.top = `${rect.top}px`;
+    panel.classList.add('dragging-panel');
+    document.body.classList.add('panel-dragging');
+
+    const onMove = (moveEvent) => {
+      const nextLeft = moveEvent.clientX - dragOffsetX;
+      const nextTop = moveEvent.clientY - dragOffsetY;
+      const clamped = clampPanelToViewport(panel, nextLeft, nextTop);
+      panel.style.left = `${clamped.left}px`;
+      panel.style.top = `${clamped.top}px`;
+    };
+
+    const onUp = () => {
+      panel.classList.remove('dragging-panel');
+      document.body.classList.remove('panel-dragging');
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+
+      const left = parseFloat(panel.style.left);
+      const top = parseFloat(panel.style.top);
+      if (!Number.isNaN(left) && !Number.isNaN(top)) {
+        savePanelPosition(storageKey, left, top);
+      }
+    };
+
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+    e.preventDefault();
+  };
+
+  handles.forEach((handle) => {
+    handle.addEventListener('mousedown', startDrag);
+  });
+
+  window.addEventListener('resize', () => {
+    if (window.getComputedStyle(panel).position === 'static') return;
+    const currentLeft = parseFloat(panel.style.left);
+    const currentTop = parseFloat(panel.style.top);
+    if (Number.isNaN(currentLeft) || Number.isNaN(currentTop)) return;
+
+    const clamped = clampPanelToViewport(panel, currentLeft, currentTop);
+    panel.style.left = `${clamped.left}px`;
+    panel.style.top = `${clamped.top}px`;
+    savePanelPosition(storageKey, clamped.left, clamped.top);
+  });
+}
+
+function initDraggablePanels() {
+  makePanelDraggable(
+    document.querySelector('.table-side-panel'),
+    '.last-trick-title, .round-history-title',
+    'info-panel'
+  );
+  makePanelDraggable(
+    document.getElementById('chat-panel'),
+    '.chat-header',
+    'chat-panel'
+  );
+  makePanelDraggable(
+    document.getElementById('bidding-panel'),
+    'h3',
+    'bidding-panel'
+  );
+}
+
+initDraggablePanels();
 
 // ---- Screen management ----
 function showScreen(name) {
