@@ -9,6 +9,27 @@ let myPosition = null;
 let myRoom = null;
 let gameState = null;
 
+// Trick collect animation (UX): wait 0.2s then slide cards to trick winner.
+const TRICK_COLLECT_DELAY_MS = 200;
+const TRICK_COLLECT_ANIM_MS = 500;
+
+// Card play animation (hand -> center)
+const PLAY_CARD_ANIM_MS = 350;
+
+let playCardAnim = {
+  running: false,
+  pendingKey: null,
+  timer: null,
+  suppressEntranceKey: null
+};
+
+let trickCollect = {
+  running: false,
+  queuedState: null,
+  lastAnimatedSig: null,
+  timers: []
+};
+
 // DOM elements
 const screens = {
   lobby: document.getElementById('lobby'),
@@ -197,6 +218,7 @@ function createCardElement(card, playable = false) {
   const color = getCardColor(card.suit);
   const figureClass = ['valet', 'dame', 'roi'].includes(card.rank) ? ' figure-face' : '';
   div.className = `card ${color}${figureClass}${playable ? ' playable' : ''}`;
+  div.dataset.cardKey = `${card.suit}-${card.rank}`;
 
   const rank = RANK_DISPLAY[card.rank] || card.rank;
   const suit = getSuitSymbol(card.suit);
@@ -211,6 +233,8 @@ function createCardElement(card, playable = false) {
 
   if (playable) {
     div.addEventListener('click', () => {
+      if (trickCollect.running) return;
+      animatePlayedCardToTrick(div, card);
       socket.emit('play-card', { card });
     });
   }
@@ -225,6 +249,7 @@ function createTrickCard(card) {
   const color = getCardColor(card.suit);
   const figureClass = ['valet', 'dame', 'roi'].includes(card.rank) ? ' figure-face' : '';
   div.className = `card trick-played ${color}${figureClass}`;
+  div.dataset.cardKey = `${card.suit}-${card.rank}`;
 
   const rank = RANK_DISPLAY[card.rank] || card.rank;
   const suit = getSuitSymbol(card.suit);
@@ -239,6 +264,304 @@ function createTrickCard(card) {
 
   applyCardFaceTexture(div, card);
   return div;
+}
+
+function createTrickCardNoEntrance(card) {
+  const el = createTrickCard(card);
+  el.classList.add('no-entrance');
+  return el;
+}
+
+function setTrickSlotCard(slotEl, card, { suppressEntrance = false } = {}) {
+  if (!slotEl) return;
+  if (!card) {
+    if (slotEl.firstChild) slotEl.innerHTML = '';
+    return;
+  }
+
+  const key = `${card.suit}-${card.rank}`;
+  const existing = slotEl.querySelector('.card');
+  const existingKey = existing ? existing.dataset.cardKey : null;
+  if (existing && existingKey === key) return;
+
+  slotEl.innerHTML = '';
+  slotEl.appendChild(suppressEntrance ? createTrickCardNoEntrance(card) : createTrickCard(card));
+}
+
+function getTrickSignature(trick) {
+  if (!Array.isArray(trick) || trick.length === 0) return '';
+  return trick
+    .map(p => `${p.player}:${p.card?.suit ?? ''}:${p.card?.rank ?? ''}`)
+    .join('|');
+}
+
+function clearTrickCollectTimers() {
+  for (const t of trickCollect.timers) clearTimeout(t);
+  trickCollect.timers = [];
+}
+
+function getOrCreateTrickAnimationLayer() {
+  let layer = document.getElementById('trick-animation-layer');
+  if (!layer) {
+    layer = document.createElement('div');
+    layer.id = 'trick-animation-layer';
+    layer.className = 'trick-animation-layer';
+    document.body.appendChild(layer);
+  }
+  return layer;
+}
+
+function getMyTrickTargetElement() {
+  try {
+    if (myPosition) {
+      const absToVisual = getAbsToVisual();
+      const visualPos = absToVisual[myPosition] || 'sud';
+      const el = document.getElementById(`trick-${visualPos}`);
+      if (el) return el;
+    }
+  } catch {
+    // ignore
+  }
+  return document.getElementById('trick-sud');
+}
+
+function measureTrickCardRectInTrickSlot(card, slotEl) {
+  if (!slotEl || !card) return null;
+  const placeholder = createTrickCardNoEntrance(card);
+  placeholder.style.visibility = 'hidden';
+  placeholder.style.pointerEvents = 'none';
+  placeholder.style.animation = 'none';
+
+  slotEl.appendChild(placeholder);
+  const rect = placeholder.getBoundingClientRect();
+  placeholder.remove();
+  return rect;
+}
+
+function animatePlayedCardToTrick(cardEl, card) {
+  if (!cardEl) return;
+  if (cardEl.dataset.animating === '1') return;
+  const targetSlot = getMyTrickTargetElement();
+  if (!targetSlot) return;
+
+  const pendingKey = cardEl.dataset.cardKey || null;
+  playCardAnim.running = true;
+  playCardAnim.pendingKey = pendingKey;
+  if (playCardAnim.timer) clearTimeout(playCardAnim.timer);
+  // Safety: clear the flag even if animation callbacks are skipped.
+  playCardAnim.timer = setTimeout(() => {
+    playCardAnim.running = false;
+    playCardAnim.pendingKey = null;
+    updateDisplay();
+  }, PLAY_CARD_ANIM_MS + 120);
+
+  const fromRect = cardEl.getBoundingClientRect();
+  const toRect = measureTrickCardRectInTrickSlot(card, targetSlot) || targetSlot.getBoundingClientRect();
+
+  // If the card is not visible, skip.
+  if (fromRect.width === 0 || fromRect.height === 0) return;
+
+  const dx = toRect.left - fromRect.left;
+  const dy = toRect.top - fromRect.top;
+
+  const layer = getOrCreateTrickAnimationLayer();
+
+  // Use a trick-styled clone so size matches the card rendered in the center.
+  const clone = createTrickCardNoEntrance(card);
+  clone.classList.add('trick-collect-card');
+  clone.style.position = 'fixed';
+  clone.style.left = `${fromRect.left}px`;
+  clone.style.top = `${fromRect.top}px`;
+  clone.style.margin = '0';
+  clone.style.zIndex = '9999';
+  clone.style.pointerEvents = 'none';
+  clone.style.opacity = '1';
+  clone.style.transform = 'translate(0px, 0px) scale(1)';
+
+  layer.appendChild(clone);
+
+  // Hide original quickly to avoid visual duplication while waiting for server state.
+  cardEl.dataset.animating = '1';
+  cardEl.style.visibility = 'hidden';
+
+  // If for any reason the server rejects the move and no re-render happens,
+  // restore visibility after a short delay.
+  setTimeout(() => {
+    if (document.body.contains(cardEl)) {
+      cardEl.style.visibility = '';
+      delete cardEl.dataset.animating;
+    }
+  }, PLAY_CARD_ANIM_MS + 800);
+
+  // Force layout before animating.
+  void layer.offsetWidth;
+
+  const animateFn = clone.animate;
+  if (typeof animateFn === 'function') {
+    const anim = clone.animate(
+      [
+        { transform: 'translate(0px, 0px) scale(1)', opacity: 1 },
+        { transform: `translate(${dx}px, ${dy}px) scale(1)`, opacity: 1 }
+      ],
+      {
+        duration: PLAY_CARD_ANIM_MS,
+        easing: 'cubic-bezier(0.2, 0.9, 0.2, 1)',
+        fill: 'forwards'
+      }
+    );
+
+    anim.finished
+      .catch(() => null)
+      .then(() => {
+        playCardAnim.suppressEntranceKey = pendingKey;
+        if (playCardAnim.timer) clearTimeout(playCardAnim.timer);
+        playCardAnim.running = false;
+        playCardAnim.pendingKey = null;
+        updateDisplay();
+        requestAnimationFrame(() => clone.remove());
+      });
+  } else {
+    clone.style.transition = `transform ${PLAY_CARD_ANIM_MS}ms cubic-bezier(0.2, 0.9, 0.2, 1)`;
+    requestAnimationFrame(() => {
+      clone.style.transform = `translate(${dx}px, ${dy}px) scale(1)`;
+    });
+    setTimeout(() => {
+      playCardAnim.suppressEntranceKey = pendingKey;
+      if (playCardAnim.timer) clearTimeout(playCardAnim.timer);
+      playCardAnim.running = false;
+      playCardAnim.pendingKey = null;
+      updateDisplay();
+      requestAnimationFrame(() => clone.remove());
+    }, PLAY_CARD_ANIM_MS + 30);
+  }
+}
+
+function clearCenterTrickSlots() {
+  for (const visualPos of ['sud', 'nord', 'est', 'ouest']) {
+    const el = document.getElementById(`trick-${visualPos}`);
+    if (el) el.innerHTML = '';
+  }
+}
+
+function startTrickCollectAnimation(trick, winnerAbsPos) {
+  if (!Array.isArray(trick) || trick.length !== 4) return;
+  if (!winnerAbsPos) return;
+
+  clearTrickCollectTimers();
+  trickCollect.running = true;
+
+  // Render the completed trick back into the center so we can animate the collection.
+  const absToVisual = getAbsToVisual();
+  clearCenterTrickSlots();
+
+  for (const play of trick) {
+    const visualPos = absToVisual[play.player];
+    const slot = document.getElementById(`trick-${visualPos}`);
+    if (!slot) continue;
+    slot.innerHTML = '';
+    slot.appendChild(createTrickCard(play.card));
+  }
+
+  const winnerVisualPos = absToVisual[winnerAbsPos];
+  const targetEl = (winnerVisualPos === 'sud')
+    ? (document.getElementById('my-hand') || document.getElementById('name-sud'))
+    : (document.getElementById(`hand-${winnerVisualPos}`) || document.getElementById(`name-${winnerVisualPos}`));
+  const targetRect = targetEl ? targetEl.getBoundingClientRect() : null;
+  const targetX = targetRect ? targetRect.left + targetRect.width / 2 : window.innerWidth / 2;
+  const targetY = targetRect ? targetRect.top + targetRect.height / 2 : window.innerHeight / 2;
+
+  const delayTimer = setTimeout(() => {
+    const layer = getOrCreateTrickAnimationLayer();
+    const flyingCards = [];
+
+    for (const visualPos of ['sud', 'nord', 'est', 'ouest']) {
+      const slot = document.getElementById(`trick-${visualPos}`);
+      const cardEl = slot ? slot.querySelector('.card') : null;
+      if (!cardEl) continue;
+
+      const rect = cardEl.getBoundingClientRect();
+      const startX = rect.left;
+      const startY = rect.top;
+      const centerX = rect.left + rect.width / 2;
+      const centerY = rect.top + rect.height / 2;
+
+      // Clone the card into the fixed overlay layer.
+      // Moving DOM nodes between containers can glitch (blink / skipped transition) depending on browser.
+      const clone = cardEl.cloneNode(true);
+      clone.classList.add('trick-collect-card');
+      clone.style.position = 'fixed';
+      clone.style.left = `${startX}px`;
+      clone.style.top = `${startY}px`;
+      clone.style.margin = '0';
+      clone.style.zIndex = '9999';
+      clone.style.pointerEvents = 'none';
+      clone.style.opacity = '1';
+      clone.style.transform = 'translate(0px, 0px) scale(1)';
+
+      layer.appendChild(clone);
+
+      flyingCards.push({
+        el: clone,
+        dx: targetX - centerX,
+        dy: targetY - centerY
+      });
+    }
+
+    // Remove center cards once the clones are placed.
+    clearCenterTrickSlots();
+
+    if (flyingCards.length === 0) {
+      trickCollect.running = false;
+      updateDisplay();
+      return;
+    }
+
+    // Force layout so initial styles are committed.
+    void layer.offsetWidth;
+
+    const donePromises = [];
+    if (typeof flyingCards[0].el.animate === 'function') {
+      for (const c of flyingCards) {
+        const anim = c.el.animate(
+          [
+            { transform: 'translate(0px, 0px) scale(1)', opacity: 1 },
+            { transform: `translate(${c.dx}px, ${c.dy}px) scale(0.65)`, opacity: 0.25 }
+          ],
+          {
+            duration: TRICK_COLLECT_ANIM_MS,
+            easing: 'cubic-bezier(0.2, 0.9, 0.2, 1)',
+            fill: 'forwards'
+          }
+        );
+        donePromises.push(anim.finished.catch(() => null));
+      }
+    } else {
+      for (const c of flyingCards) {
+        c.el.style.transition = `transform ${TRICK_COLLECT_ANIM_MS}ms cubic-bezier(0.2, 0.9, 0.2, 1), opacity ${TRICK_COLLECT_ANIM_MS}ms ease`;
+      }
+      requestAnimationFrame(() => {
+        for (const c of flyingCards) {
+          c.el.style.transform = `translate(${c.dx}px, ${c.dy}px) scale(0.65)`;
+          c.el.style.opacity = '0.25';
+        }
+      });
+      donePromises.push(new Promise(resolve => setTimeout(resolve, TRICK_COLLECT_ANIM_MS + 30)));
+    }
+
+    Promise.allSettled(donePromises).then(() => {
+      for (const c of flyingCards) c.el.remove();
+      trickCollect.running = false;
+
+      const queued = trickCollect.queuedState;
+      trickCollect.queuedState = null;
+      if (queued) {
+        gameState = queued;
+      }
+      updateDisplay();
+    });
+  }, TRICK_COLLECT_DELAY_MS);
+
+  trickCollect.timers.push(delayTimer);
 }
 
 function createCardBacks(count) {
@@ -426,31 +749,46 @@ function updatePlayers() {
 function updateTrick() {
   const absToVisual = getAbsToVisual();
 
-  // Clear all trick positions
-  for (const visualPos of ['sud', 'nord', 'est', 'ouest']) {
-    document.getElementById(`trick-${visualPos}`).innerHTML = '';
-    document.getElementById(`last-trick-${visualPos}`).innerHTML = '';
-  }
-
+  // Build desired state for current trick per visual position.
+  const desiredCurrent = { sud: null, nord: null, est: null, ouest: null };
   if (gameState.currentTrick && gameState.currentTrick.length > 0) {
     for (const play of gameState.currentTrick) {
-      const visualPos = absToVisual[play.player];
-      const el = document.getElementById(`trick-${visualPos}`);
-      if (el) {
-        el.appendChild(createTrickCard(play.card));
+      // If we are animating our played card hand->center, don't render it in the trick area yet.
+      if (
+        playCardAnim.running &&
+        play.player === myPosition &&
+        playCardAnim.pendingKey &&
+        play.card &&
+        playCardAnim.pendingKey === `${play.card.suit}-${play.card.rank}`
+      ) {
+        continue;
       }
+      const visualPos = absToVisual[play.player];
+      if (visualPos) desiredCurrent[visualPos] = play.card;
     }
   }
 
-  // Afficher le dernier pli en permanence
+  for (const visualPos of ['sud', 'nord', 'est', 'ouest']) {
+    const slot = document.getElementById(`trick-${visualPos}`);
+    const card = desiredCurrent[visualPos];
+    const key = card ? `${card.suit}-${card.rank}` : null;
+    const suppress = key && playCardAnim.suppressEntranceKey === key;
+    setTrickSlotCard(slot, card, { suppressEntrance: !!suppress });
+    if (suppress) playCardAnim.suppressEntranceKey = null;
+  }
+
+  // Last trick (side panel): also update incrementally to avoid flicker.
+  const desiredLast = { sud: null, nord: null, est: null, ouest: null };
   if (gameState.lastTrick && gameState.lastTrick.length === 4) {
     for (const play of gameState.lastTrick) {
       const visualPos = absToVisual[play.player];
-      const el = document.getElementById(`last-trick-${visualPos}`);
-      if (el) {
-        el.appendChild(createTrickCard(play.card));
-      }
+      if (visualPos) desiredLast[visualPos] = play.card;
     }
+  }
+
+  for (const visualPos of ['sud', 'nord', 'est', 'ouest']) {
+    const slot = document.getElementById(`last-trick-${visualPos}`);
+    setTrickSlotCard(slot, desiredLast[visualPos], { suppressEntrance: true });
   }
 }
 
@@ -683,8 +1021,30 @@ document.getElementById('btn-new-game').addEventListener('click', () => {
 
 // Main game-state listener
 socket.on('game-state', (state) => {
+  if (trickCollect.running) {
+    trickCollect.queuedState = state;
+    return;
+  }
+
+  const prevSig = getTrickSignature(gameState ? gameState.lastTrick : null);
+  const nextSig = getTrickSignature(state.lastTrick);
+  const shouldAnimate =
+    gameState &&
+    state &&
+    state.state === 'playing' &&
+    Array.isArray(state.lastTrick) &&
+    state.lastTrick.length === 4 &&
+    nextSig &&
+    nextSig !== prevSig &&
+    nextSig !== trickCollect.lastAnimatedSig;
+
   gameState = state;
   updateDisplay();
+
+  if (shouldAnimate) {
+    trickCollect.lastAnimatedSig = nextSig;
+    startTrickCollectAnimation(state.lastTrick, state.lastTrickWinner || state.currentPlayer);
+  }
 });
 
 function showRoundResult(state) {
