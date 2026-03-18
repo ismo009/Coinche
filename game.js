@@ -702,21 +702,17 @@ class CoincheGame {
     if (contractMet) {
       // Le contrat est réussi
       if (contractTeam === 'ns') {
-        if (this.contract.points === 250 || this.contract.points === 500) {
-          scoreNS = contractBonus + belotePoints.ns;
-        } else if (this.contract.points === 270) {
-          // Capot beloté: 270 inclut déjà la belote
-          scoreNS = contractBonus;
+        if (this.contract.points === 250 || this.contract.points === 270 || this.contract.points === 500) {
+          // Annonces spéciales: annonce + points faits
+          scoreNS = contractPoints + contractBonus;
         } else {
           scoreNS = contractPoints + contractBonus;
         }
         scoreEO = defensePoints;
       } else {
-        if (this.contract.points === 250 || this.contract.points === 500) {
-          scoreEO = contractBonus + belotePoints.eo;
-        } else if (this.contract.points === 270) {
-          // Capot beloté: 270 inclut déjà la belote
-          scoreEO = contractBonus;
+        if (this.contract.points === 250 || this.contract.points === 270 || this.contract.points === 500) {
+          // Annonces spéciales: annonce + points faits
+          scoreEO = contractPoints + contractBonus;
         } else {
           scoreEO = contractPoints + contractBonus;
         }
