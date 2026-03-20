@@ -74,6 +74,7 @@
 
 html {
   font-size: 16px;
+  color-scheme: light;
 }
 
 body {
@@ -83,6 +84,11 @@ body {
   min-height: 100vh;
   overflow-x: hidden;
   -webkit-font-smoothing: antialiased;
+  color-scheme: light;
+}
+
+#mobile-top-panel {
+  display: none;
 }
 
 ::selection {
@@ -564,6 +570,9 @@ body {
   flex-direction: column;
   min-height: 100vh;
   position: relative;
+  /* Keep the game's intended palette even if the OS/browser is in dark mode. */
+  color-scheme: light;
+  forced-color-adjust: none;
   background:
     url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='4' height='4'%3E%3Crect width='4' height='4' fill='%23276838'/%3E%3Crect width='1' height='1' x='0' y='0' fill='%23256535' opacity='0.4'/%3E%3Crect width='1' height='1' x='2' y='2' fill='%23287040' opacity='0.3'/%3E%3C/svg%3E"),
     radial-gradient(ellipse at 50% 45%, var(--felt-center) 0%, var(--felt-mid) 35%, var(--felt-edge) 65%, var(--felt-dark) 100%);
@@ -1340,6 +1349,18 @@ body.panel-dragging * {
   color: var(--text-muted);
 }
 
+.chat-close-btn,
+.chat-open-btn {
+  display: none;
+}
+
+.chat-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
 .chat-messages {
   flex: 1;
   overflow-y: auto;
@@ -1870,4 +1891,399 @@ body.panel-dragging * {
     padding: 8px 10px;
     gap: 3px;
   }
+}
+
+/* ============================================================
+   PHONE CHAT TOGGLE
+   - Mobile only: chat opens via a button, overlays the game
+   - Semi-transparent (75%) so the table stays visible behind
+   - Desktop UI unchanged
+   ============================================================ */
+
+@media (max-width: 600px) {
+  /* Phone top HUD background */
+  #mobile-top-panel {
+    display: block;
+    position: fixed;
+    left: 0;
+    right: 0;
+    top: 0;
+    height: calc(env(safe-area-inset-top, 0px) + 156px);
+    z-index: 8;
+    pointer-events: none;
+  }
+
+  #mobile-top-panel::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: var(--bg-card-panel);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    backdrop-filter: blur(10px);
+  }
+
+  /* Reposition the existing HUD elements into the top area (no DOM duplication). */
+  #scoreboard {
+    top: calc(env(safe-area-inset-top, 0px) + 10px);
+    left: 10px;
+    transform: none;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 10px 14px;
+    font-size: 16px;
+    z-index: 10;
+  }
+
+  /* Round points (current hand) anchored under the match scoreboard */
+  #round-points {
+    top: calc(env(safe-area-inset-top, 0px) + 92px);
+    left: 10px;
+    bottom: auto;
+    right: auto;
+    transform: none;
+    padding: 8px 12px;
+    font-size: 12px;
+    gap: 12px;
+    z-index: 10;
+  }
+
+  .score-separator {
+    display: none;
+  }
+
+  #contract-info {
+    top: calc(env(safe-area-inset-top, 0px) + 10px);
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 10;
+    max-width: min(60vw, 360px);
+    text-align: center;
+  }
+
+  .table-side-panel {
+    position: fixed;
+    top: calc(env(safe-area-inset-top, 0px) + 10px);
+    right: 10px;
+    left: auto;
+    width: 190px;
+    z-index: 10;
+  }
+
+  /* Table play area should start below the top HUD */
+  .table-layout {
+    padding-top: calc(env(safe-area-inset-top, 0px) + 176px);
+  }
+
+  /* Keep last trick compact in the phone top HUD */
+  .last-trick-panel {
+    padding: 6px 8px;
+  }
+
+  .last-trick-area {
+    width: 96px;
+    height: 96px;
+  }
+
+  .last-trick-area .card.trick-played {
+    width: 32px;
+    height: 46px;
+  }
+
+  /* Allow collapsing "Dernier pli" on phone */
+  .last-trick-title {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 0;
+  }
+
+  .last-trick-title::after {
+    content: '▾';
+    font-size: 12px;
+    color: var(--text-muted);
+  }
+
+  body.mobile-lasttrick-collapsed .last-trick-area {
+    display: none;
+  }
+
+  body.mobile-lasttrick-collapsed .last-trick-title::after {
+    content: '▸';
+  }
+
+  /* Round history: collapsed by default, expandable on demand */
+  #round-history-panel {
+    max-height: 36px;
+    overflow: hidden;
+  }
+
+  #round-history-panel .round-history-title {
+    margin-bottom: 0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+
+  #round-history-panel .round-history-title::after {
+    content: '▾';
+    font-size: 12px;
+    color: var(--text-muted);
+  }
+
+  #round-history-list {
+    display: none;
+  }
+
+  body.mobile-history-open #round-history-panel {
+    max-height: min(46vh, 420px);
+  }
+
+  body.mobile-history-open #round-history-list {
+    display: flex;
+    max-height: min(40vh, 360px);
+    overflow-y: auto;
+  }
+
+  body.mobile-history-open #round-history-panel .round-history-title::after {
+    content: '▴';
+  }
+
+  #chat-panel {
+    display: none;
+    /* Use existing theme primitive, but less opaque so the game stays visible behind. */
+    background: transparent;
+    position: fixed;
+    left: 10px;
+    right: 10px;
+    top: auto;
+    bottom: calc(env(safe-area-inset-bottom, 0px) + 84px);
+    width: auto;
+    height: 240px;
+    z-index: 18;
+  }
+
+  #chat-panel::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: var(--bg-card-panel);
+    opacity: 0.75;
+    border-radius: inherit;
+    pointer-events: none;
+  }
+
+  #chat-panel > * {
+    position: relative;
+    z-index: 1;
+  }
+
+  body.chat-open #chat-panel {
+    display: flex;
+  }
+
+  .chat-close-btn {
+    display: inline-flex;
+  }
+
+  .chat-open-btn {
+    display: inline-flex;
+    position: fixed;
+    left: 10px;
+    bottom: calc(env(safe-area-inset-bottom, 0px) + 14px);
+    z-index: 18;
+  }
+
+  body.chat-open .chat-open-btn {
+    display: none;
+  }
+}
+
+/* ============================================================
+   MOBILE PORTRAIT GAMEPLAY OVERRIDES
+   - Show only my hand at the bottom
+   - Keep trick area centered
+   - Do not display other players' hands
+   - Center bidding panel (avoid covering the announcer's hand)
+   ============================================================ */
+
+@media (max-width: 600px) and (orientation: portrait) {
+  /* Do not display other players' hands (card backs). */
+  #hand-nord,
+  #hand-est,
+  #hand-ouest {
+    display: none !important;
+  }
+
+  /* Reserve space at the bottom so the player's hand remains visible. */
+  .table-layout {
+    padding-bottom: 230px;
+    grid-template-rows: 85px 1fr 24px;
+  }
+
+  /* Keep the player's hand visually anchored at the bottom. */
+  .player-south.my-area {
+    position: fixed;
+    left: 8px;
+    right: 8px;
+    bottom: calc(env(safe-area-inset-bottom, 0px) + 8px);
+    z-index: 16;
+  }
+
+  /* Reserve space for the mobile chat button so it doesn't cover cards. */
+  .player-south.my-area .my-hand {
+    padding-left: 56px;
+  }
+
+  /* Reduce vertical clutter for opponents since their hands are hidden. */
+  .player-north .player-info,
+  .player-west .player-info,
+  .player-east .player-info {
+    margin-bottom: 0;
+  }
+
+  /* Move overlays above the reserved hand area (avoid covering cards). */
+  /* Mobile chat placement (portrait gameplay): keep it above the reserved hand area. */
+  #chat-panel {
+    top: auto;
+    bottom: calc(env(safe-area-inset-bottom, 0px) + 248px);
+    left: 8px;
+    right: 8px;
+    width: auto;
+    height: 200px;
+  }
+
+  #messages {
+    bottom: calc(env(safe-area-inset-bottom, 0px) + 440px);
+  }
+
+  /* Bidding panel: keep it centered (override the 480px bottom sheet). */
+  #bidding-panel {
+    left: 50%;
+    top: 50%;
+    right: auto;
+    bottom: auto;
+    width: min(92vw, 320px);
+    transform: translate(-50%, -50%);
+    max-height: calc(100vh - 300px);
+    border-radius: var(--radius-lg);
+  }
+}
+
+/* ============================================================
+   PHONE DARK MODE
+   - Avoid browser auto darkening on the game screen
+   - Dark violet lobby with light text (phone only)
+   ============================================================ */
+
+@media (max-width: 600px) and (prefers-color-scheme: dark) {
+  /* Opt into dark color-scheme only for the lobby (the game stays in light scheme). */
+  #lobby {
+    color-scheme: dark;
+  }
+
+  #lobby {
+    background:
+      radial-gradient(circle at 18% 18%, rgba(212, 168, 67, 0.16) 0%, rgba(212, 168, 67, 0) 42%),
+      radial-gradient(circle at 84% 84%, rgba(62, 207, 207, 0.12) 0%, rgba(62, 207, 207, 0) 44%),
+      linear-gradient(150deg, var(--bg-dark) 0%, var(--bg-medium) 55%, var(--bg-light) 100%);
+  }
+
+  #lobby::before {
+    background-image:
+      linear-gradient(120deg, rgba(0, 0, 0, 0.35) 0%, rgba(0, 0, 0, 0) 55%),
+      repeating-linear-gradient(35deg, rgba(255, 255, 255, 0.04) 0 10px, rgba(255, 255, 255, 0.02) 10px 20px);
+  }
+
+  #lobby::after {
+    background: radial-gradient(circle at 35% 35%, rgba(30, 30, 58, 0.65), rgba(30, 30, 58, 0));
+  }
+
+  .lobby-container {
+    background: var(--bg-card-panel);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    box-shadow: 0 32px 70px rgba(0, 0, 0, 0.55);
+    color: var(--text);
+  }
+
+  .lobby-container h1 {
+    background: none;
+    -webkit-text-fill-color: var(--text);
+    filter: none;
+  }
+
+  .subtitle {
+    color: var(--text);
+    opacity: 0.9;
+  }
+
+  .lobby-form input,
+  .lobby-form select {
+    background: var(--bg-medium);
+    color: var(--text);
+    border-color: rgba(255, 255, 255, 0.14);
+  }
+
+  .lobby-form input:focus,
+  .lobby-form select:focus {
+    border-color: var(--gold);
+    box-shadow: 0 0 0 3px rgba(212, 168, 67, 0.22);
+  }
+
+  .lobby-form input::placeholder {
+    color: var(--text-dim);
+  }
+
+  .action-group {
+    background: var(--bg-medium);
+    border-color: rgba(255, 255, 255, 0.10);
+    box-shadow: none;
+  }
+
+  .action-group:hover {
+    border-color: rgba(255, 255, 255, 0.16);
+    box-shadow: 0 10px 28px rgba(0, 0, 0, 0.35);
+  }
+
+  .action-group h3 {
+    color: var(--text);
+    opacity: 0.92;
+  }
+
+  .separator {
+    color: var(--text-muted);
+    background: rgba(0, 0, 0, 0.25);
+    border-color: rgba(255, 255, 255, 0.10);
+  }
+
+  #lobby .btn-primary {
+    background: linear-gradient(135deg, var(--gold), #b8942f);
+    color: #1a1000;
+    box-shadow: 0 8px 18px rgba(212, 168, 67, 0.22);
+  }
+
+  #lobby .btn-secondary {
+    background: var(--bg-light);
+    border-color: rgba(255, 255, 255, 0.10);
+    color: var(--text);
+  }
+}
+
+@media (forced-colors: active) {
+  #game-table,
+  #game-table * {
+    forced-color-adjust: none;
+  }
+}
+
+/* Some mobile browsers (Samsung Internet / vendor features) may apply forced darkening.
+   We can't fully override a user-forced filter, but we can strongly hint to keep the
+   game area in a light color scheme and avoid inherited transforms/filters. */
+#game-table,
+#game-table * {
+  color-scheme: light;
+  forced-color-adjust: none;
+  filter: none;
 }
