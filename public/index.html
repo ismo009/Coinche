@@ -4,6 +4,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="light">
+  <meta name="supported-color-schemes" content="light">
   <title>Coinche - Jeu de Cartes</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -17,8 +19,9 @@
   <!-- ECRAN D'ACCUEIL -->
   <div id="lobby" class="screen">
     <div class="lobby-container">
-      <h1>♠ Cari'Coinche ♥</h1>
-      <p class="subtitle">Jeu de cartes multijoueur</p>
+      <img class="brand-logo brand-logo-lobby" src="/logo/logo.png" alt="Logo Cari'Coinche" loading="eager"
+        decoding="async">
+      <h1 class="subtitle">♠ Jeu de cartes multijoueur♥</h1>
 
       <div class="lobby-form">
         <input type="text" id="player-name" placeholder="Ton pseudo" maxlength="20" autocomplete="off">
@@ -59,6 +62,8 @@
   <!-- SALLE D'ATTENTE -->
   <div id="waiting-room" class="screen hidden">
     <div class="waiting-container">
+      <img class="brand-logo brand-logo-waiting" src="/logo/logo.png" alt="Logo Cari'Coinche" loading="lazy"
+        decoding="async">
       <h2>Salle: <span id="room-code-display"></span></h2>
       <p>Partagez ce code avec vos amis !</p>
       <div class="players-grid">
@@ -87,6 +92,9 @@
 
   <!-- TABLE DE JEU -->
   <div id="game-table" class="screen hidden">
+    <!-- Mobile: bandeau haut (fond uniquement, les panels existants sont repositionnés via CSS) -->
+    <div id="mobile-top-panel" aria-hidden="true"></div>
+
     <!-- Scores -->
     <div id="scoreboard">
       <div class="score-team">
@@ -177,6 +185,22 @@
       <span class="team-ns">NS: <span id="round-ns">0</span></span>
       <span class="team-eo">EO: <span id="round-eo">0</span></span>
     </div>
+
+    <!-- Chat joueurs -->
+    <div id="chat-panel" aria-label="Chat de la partie">
+      <div class="chat-header">
+        <span>Chat</span>
+        <button id="btn-chat-close" class="btn btn-secondary btn-sm chat-close-btn" type="button" aria-label="Réduire le chat">Réduire</button>
+      </div>
+      <div id="chat-messages" class="chat-messages"></div>
+      <div class="chat-input-row">
+        <input id="chat-input" type="text" maxlength="180" placeholder="Ecris un message..." autocomplete="off">
+        <button id="btn-chat-send" class="btn btn-secondary btn-sm" type="button">Envoyer</button>
+      </div>
+    </div>
+
+    <!-- Mobile: bouton d'ouverture du chat -->
+    <button id="btn-chat-open" class="btn btn-secondary btn-sm chat-open-btn" type="button" aria-label="Ouvrir le chat">Chat</button>
 
     <!-- Zone d'enchères -->
     <div id="bidding-panel" class="hidden">

@@ -74,6 +74,7 @@
 
 html {
   font-size: 16px;
+  color-scheme: light;
 }
 
 body {
@@ -83,6 +84,11 @@ body {
   min-height: 100vh;
   overflow-x: hidden;
   -webkit-font-smoothing: antialiased;
+  color-scheme: light;
+}
+
+#mobile-top-panel {
+  display: none;
 }
 
 ::selection {
@@ -191,9 +197,9 @@ body {
   position: relative;
   isolation: isolate;
   background:
-    radial-gradient(circle at 18% 16%, rgba(251, 244, 220, 0.45) 0%, rgba(251, 244, 220, 0) 42%),
-    radial-gradient(circle at 86% 84%, rgba(186, 216, 156, 0.38) 0%, rgba(186, 216, 156, 0) 40%),
-    linear-gradient(145deg, #e8f1d3 0%, #c7dfac 38%, #b5d492 70%, #d6e8ba 100%);
+    radial-gradient(circle at 14% 14%, rgba(249, 241, 217, 0.16) 0%, rgba(249, 241, 217, 0) 42%),
+    radial-gradient(circle at 86% 86%, rgba(149, 74, 47, 0.22) 0%, rgba(149, 74, 47, 0) 44%),
+    linear-gradient(142deg, #0f1f2a 0%, #1b3440 46%, #274855 78%, #1f3d49 100%);
 }
 
 #lobby::before,
@@ -207,8 +213,8 @@ body {
 #lobby::before {
   inset: 0;
   background-image:
-    linear-gradient(120deg, rgba(47, 85, 46, 0.06) 0%, rgba(47, 85, 46, 0) 35%),
-    repeating-linear-gradient(35deg, rgba(255, 255, 255, 0.08) 0 10px, rgba(255, 255, 255, 0.02) 10px 20px);
+    linear-gradient(120deg, rgba(0, 0, 0, 0.22) 0%, rgba(0, 0, 0, 0) 55%),
+    repeating-linear-gradient(35deg, rgba(255, 255, 255, 0.05) 0 10px, rgba(255, 255, 255, 0.02) 10px 20px);
 }
 
 #lobby::after {
@@ -217,7 +223,7 @@ body {
   right: -110px;
   top: -130px;
   border-radius: 50%;
-  background: radial-gradient(circle at 35% 35%, rgba(71, 120, 65, 0.28), rgba(71, 120, 65, 0));
+  background: radial-gradient(circle at 35% 35%, rgba(249, 241, 217, 0.2), rgba(249, 241, 217, 0));
   filter: blur(2px);
   animation: lobby-drift 7s ease-in-out infinite alternate;
 }
@@ -229,30 +235,47 @@ body {
   width: 92%;
   border-radius: 30px;
   background:
-    linear-gradient(180deg, rgba(255, 254, 247, 0.93) 0%, rgba(245, 250, 231, 0.92) 100%);
-  border: 1px solid rgba(67, 112, 57, 0.18);
+    linear-gradient(180deg, rgba(249, 241, 217, 0.98) 0%, rgba(246, 236, 212, 0.96) 100%);
+  border: 1px solid rgba(39, 72, 85, 0.35);
   box-shadow:
-    0 32px 70px rgba(48, 78, 43, 0.25),
+    0 32px 70px rgba(0, 0, 0, 0.45),
     inset 0 1px 0 rgba(255, 255, 255, 0.6);
   backdrop-filter: blur(2px);
 }
 
+.brand-logo {
+  display: block;
+  object-fit: contain;
+  margin: 0 auto;
+  filter: drop-shadow(0 8px 18px rgba(0, 0, 0, 0.25));
+}
+
+.brand-logo-lobby {
+  width: min(220px, 52vw);
+  margin-bottom: 12px;
+}
+
+.brand-logo-waiting {
+  width: min(180px, 44vw);
+  margin-bottom: 8px;
+}
+
 .lobby-container h1 {
   font-family: 'Playfair Display', Georgia, serif;
-  font-size: clamp(2.3rem, 4.4vw, 3.3rem);
-  font-weight: 900;
+  font-size: clamp(2.0rem, 4.0vw, 3.0rem);
+  font-weight: 100;
   margin-bottom: 8px;
   letter-spacing: 0.02em;
-  background: linear-gradient(165deg, #2f5f31 0%, #4a8546 48%, #6ea45f 100%);
+  background: linear-gradient(165deg, #274855 0%, #67442f 48%, #954a2f 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
   text-shadow: none;
-  filter: drop-shadow(0 3px 10px rgba(51, 93, 48, 0.22));
+  filter: drop-shadow(0 3px 10px rgba(39, 72, 85, 0.25));
 }
 
 .subtitle {
-  color: #44603f;
+  color: #274855;
   margin-bottom: 30px;
   font-size: 13px;
   letter-spacing: 2.6px;
@@ -265,10 +288,10 @@ body {
   width: 100%;
   padding: 13px 15px;
   margin-bottom: 14px;
-  border: 1.5px solid rgba(80, 124, 64, 0.26);
+  border: 1.5px solid rgba(39, 72, 85, 0.3);
   border-radius: 14px;
-  background: rgba(255, 255, 250, 0.92);
-  color: #28422b;
+  background: rgba(255, 253, 248, 0.98);
+  color: #3d2b1f;
   font-family: var(--font-body);
   font-size: 14px;
   transition: all var(--transition);
@@ -277,12 +300,12 @@ body {
 .lobby-form input:focus,
 .lobby-form select:focus {
   outline: none;
-  border-color: #508941;
-  box-shadow: 0 0 0 3px rgba(123, 173, 102, 0.3);
+  border-color: #274855;
+  box-shadow: 0 0 0 3px rgba(39, 72, 85, 0.22);
 }
 
 .lobby-form input::placeholder {
-  color: #789176;
+  color: #7b7f82;
 }
 
 .lobby-actions {
@@ -294,24 +317,24 @@ body {
 
 .action-group {
   flex: 1;
-  background: linear-gradient(180deg, rgba(254, 255, 245, 0.9), rgba(238, 248, 224, 0.85));
+  background: linear-gradient(180deg, rgba(252, 246, 231, 0.98), rgba(246, 236, 214, 0.96));
   padding: 20px 18px;
   border-radius: var(--radius-lg);
-  border: 1px solid rgba(70, 116, 57, 0.2);
+  border: 1px solid rgba(39, 72, 85, 0.24);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.55);
   transition: transform var(--transition), border-color var(--transition), box-shadow var(--transition);
 }
 
 .action-group:hover {
   transform: translateY(-2px);
-  border-color: rgba(70, 116, 57, 0.36);
-  box-shadow: 0 8px 24px rgba(62, 104, 56, 0.14);
+  border-color: rgba(39, 72, 85, 0.42);
+  box-shadow: 0 8px 24px rgba(39, 72, 85, 0.2);
 }
 
 .action-group h3 {
   margin-bottom: 14px;
   font-size: 12px;
-  color: #4a6642;
+  color: #67442f;
   text-transform: uppercase;
   letter-spacing: 1.5px;
   font-weight: 700;
@@ -320,13 +343,13 @@ body {
 .separator {
   display: flex;
   align-items: center;
-  color: #5f7b55;
+  color: #274855;
   font-weight: 700;
   font-size: 12px;
   text-transform: uppercase;
   letter-spacing: 1px;
-  background: rgba(255, 255, 255, 0.6);
-  border: 1px solid rgba(70, 116, 57, 0.18);
+  background: rgba(249, 241, 217, 0.78);
+  border: 1px solid rgba(39, 72, 85, 0.22);
   padding: 0 12px;
   border-radius: 999px;
 }
@@ -338,32 +361,32 @@ body {
 }
 
 #lobby .btn-primary {
-  background: linear-gradient(135deg, #3f7a3d 0%, #5e9f50 100%);
-  color: #f7ffef;
-  box-shadow: 0 8px 18px rgba(54, 97, 47, 0.25);
+  background: linear-gradient(135deg, #274855 0%, #1f3943 100%);
+  color: #f9f1d9;
+  box-shadow: 0 8px 18px rgba(39, 72, 85, 0.38);
 }
 
 #lobby .btn-primary:hover:not(:disabled) {
-  box-shadow: 0 10px 22px rgba(54, 97, 47, 0.32);
+  box-shadow: 0 10px 22px rgba(39, 72, 85, 0.5);
 }
 
 #lobby .btn-secondary {
-  background: linear-gradient(135deg, #e9f4db 0%, #d5e8bf 100%);
-  border-color: rgba(70, 116, 57, 0.28);
-  color: #2b4729;
+  background: linear-gradient(135deg, #fffdf8 0%, #f4e5bf 100%);
+  border-color: rgba(39, 72, 85, 0.28);
+  color: #274855;
 }
 
 #lobby .btn-secondary:hover:not(:disabled) {
-  border-color: rgba(70, 116, 57, 0.42);
+  border-color: rgba(39, 72, 85, 0.46);
 }
 
 .error-msg {
-  color: #7b2f2f;
+  color: #7a2c1f;
   margin-top: 16px;
   padding: 12px 16px;
-  background: rgba(222, 117, 98, 0.13);
+  background: rgba(149, 74, 47, 0.16);
   border-radius: var(--radius-md);
-  border: 1px solid rgba(179, 81, 65, 0.3);
+  border: 1px solid rgba(149, 74, 47, 0.35);
   font-size: 13px;
 }
 
@@ -385,9 +408,9 @@ body {
   position: relative;
   isolation: isolate;
   background:
-    radial-gradient(circle at 14% 18%, rgba(252, 246, 222, 0.38) 0%, rgba(252, 246, 222, 0) 38%),
-    radial-gradient(circle at 84% 82%, rgba(178, 214, 145, 0.36) 0%, rgba(178, 214, 145, 0) 42%),
-    linear-gradient(145deg, #e7f0d2 0%, #c6deaa 36%, #b8d596 70%, #d7e9bf 100%);
+    radial-gradient(circle at 15% 15%, rgba(249, 241, 217, 0.14) 0%, rgba(249, 241, 217, 0) 42%),
+    radial-gradient(circle at 88% 86%, rgba(149, 74, 47, 0.18) 0%, rgba(149, 74, 47, 0) 44%),
+    linear-gradient(145deg, #101f29 0%, #1a313d 48%, #274855 80%, #1f3a45 100%);
 }
 
 #waiting-room::before {
@@ -397,8 +420,8 @@ body {
   pointer-events: none;
   z-index: -1;
   background-image:
-    linear-gradient(135deg, rgba(56, 97, 52, 0.08) 0%, rgba(56, 97, 52, 0) 40%),
-    repeating-linear-gradient(-35deg, rgba(255, 255, 255, 0.08) 0 11px, rgba(255, 255, 255, 0.03) 11px 22px);
+    linear-gradient(135deg, rgba(0, 0, 0, 0.24) 0%, rgba(0, 0, 0, 0) 40%),
+    repeating-linear-gradient(-35deg, rgba(255, 255, 255, 0.05) 0 11px, rgba(255, 255, 255, 0.02) 11px 22px);
 }
 
 .waiting-container {
@@ -406,10 +429,10 @@ body {
   padding: 42px 36px;
   width: min(760px, 94%);
   border-radius: 30px;
-  background: linear-gradient(180deg, rgba(255, 254, 246, 0.93), rgba(243, 250, 229, 0.9));
-  border: 1px solid rgba(67, 112, 57, 0.18);
+  background: linear-gradient(180deg, rgba(249, 241, 217, 0.98), rgba(246, 234, 206, 0.95));
+  border: 1px solid rgba(39, 72, 85, 0.34);
   box-shadow:
-    0 30px 68px rgba(48, 78, 43, 0.22),
+    0 30px 68px rgba(0, 0, 0, 0.45),
     inset 0 1px 0 rgba(255, 255, 255, 0.62);
 }
 
@@ -418,29 +441,29 @@ body {
   font-family: 'Playfair Display', Georgia, serif;
   font-weight: 700;
   font-size: clamp(1.5rem, 3.6vw, 2.2rem);
-  color: #2e5931;
+  color: #274855;
   letter-spacing: 0.01em;
 }
 
 .waiting-container>p {
-  color: #4d6a46;
+  color: #67442f;
   font-size: 14px;
   font-weight: 600;
 }
 
 #room-code-display {
-  background: linear-gradient(135deg, #3f7a3d 0%, #5e9f50 100%);
-  color: #f4fde9;
+  background: linear-gradient(135deg, #274855 0%, #1f3943 100%);
+  color: #f9f1d9;
   padding: 7px 20px;
   border-radius: 999px;
-  border: 1px solid rgba(52, 93, 45, 0.34);
+  border: 1px solid rgba(39, 72, 85, 0.44);
   font-family: var(--font-mono);
   font-size: 1.2em;
   font-weight: 600;
   letter-spacing: 4px;
   user-select: all;
   display: inline-block;
-  box-shadow: 0 10px 20px rgba(58, 103, 50, 0.24);
+  box-shadow: 0 10px 20px rgba(39, 72, 85, 0.3);
 }
 
 .players-grid {
@@ -457,20 +480,20 @@ body {
 
 .player-slot {
   padding: 18px 14px;
-  background: linear-gradient(180deg, rgba(253, 255, 246, 0.9), rgba(236, 247, 223, 0.84));
+  background: linear-gradient(180deg, rgba(253, 248, 236, 0.98), rgba(246, 234, 208, 0.95));
   border-radius: var(--radius-md);
-  border: 2px dashed rgba(79, 123, 65, 0.35);
+  border: 2px dashed rgba(39, 72, 85, 0.34);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.65);
   transition: transform 0.28s ease, border-color 0.28s ease, box-shadow 0.28s ease;
 }
 
 .player-slot.occupied {
   border-style: solid;
-  border-color: #4e8b45;
-  background: linear-gradient(180deg, rgba(236, 250, 222, 0.95), rgba(216, 240, 196, 0.92));
+  border-color: #274855;
+  background: linear-gradient(180deg, rgba(246, 237, 217, 0.98), rgba(236, 220, 188, 0.96));
   box-shadow:
-    0 10px 18px rgba(70, 116, 57, 0.16),
-    0 0 0 2px rgba(123, 173, 102, 0.18);
+    0 10px 18px rgba(39, 72, 85, 0.18),
+    0 0 0 2px rgba(39, 72, 85, 0.18);
   animation: waiting-slot-live 1.8s ease-in-out infinite;
 }
 
@@ -492,7 +515,7 @@ body {
 
 .slot-label {
   font-size: 10px;
-  color: #627f5d;
+  color: #42616f;
   text-transform: uppercase;
   letter-spacing: 2px;
   font-weight: 700;
@@ -502,15 +525,15 @@ body {
   font-weight: 700;
   margin-top: 6px;
   font-size: 14px;
-  color: #29452d;
+  color: #274855;
 }
 
 .team-info {
   margin-top: 24px;
-  color: #4d6a46;
+  color: #274855;
   font-size: 14px;
-  background: rgba(255, 255, 255, 0.62);
-  border: 1px solid rgba(70, 116, 57, 0.16);
+  background: rgba(249, 241, 217, 0.74);
+  border: 1px solid rgba(39, 72, 85, 0.22);
   border-radius: 999px;
   display: inline-block;
   padding: 8px 16px;
@@ -547,6 +570,9 @@ body {
   flex-direction: column;
   min-height: 100vh;
   position: relative;
+  /* Keep the game's intended palette even if the OS/browser is in dark mode. */
+  color-scheme: light;
+  forced-color-adjust: none;
   background:
     url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='4' height='4'%3E%3Crect width='4' height='4' fill='%23276838'/%3E%3Crect width='1' height='1' x='0' y='0' fill='%23256535' opacity='0.4'/%3E%3Crect width='1' height='1' x='2' y='2' fill='%23287040' opacity='0.3'/%3E%3C/svg%3E"),
     radial-gradient(ellipse at 50% 45%, var(--felt-center) 0%, var(--felt-mid) 35%, var(--felt-edge) 65%, var(--felt-dark) 100%);
@@ -863,6 +889,24 @@ body {
   color: var(--text-muted);
   text-align: center;
   margin-bottom: 8px;
+}
+
+.table-side-panel .last-trick-title,
+.table-side-panel .round-history-title,
+#chat-panel .chat-header,
+#bidding-panel h3 {
+  cursor: grab;
+  user-select: none;
+}
+
+.dragging-panel {
+  opacity: 0.98;
+}
+
+body.panel-dragging,
+body.panel-dragging * {
+  cursor: grabbing !important;
+  user-select: none !important;
 }
 
 .round-history-list {
@@ -1278,6 +1322,127 @@ body {
   font-family: var(--font-mono);
 }
 
+/* ---- Chat panel ---- */
+#chat-panel {
+  position: fixed;
+  right: 14px;
+  bottom: 14px;
+  width: 290px;
+  height: 240px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  background: var(--bg-card-panel);
+  border-radius: var(--radius-lg);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  box-shadow: var(--shadow-lg);
+  backdrop-filter: blur(10px);
+  z-index: 17;
+}
+
+.chat-header {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--text-muted);
+}
+
+.chat-close-btn,
+.chat-open-btn {
+  display: none;
+}
+
+.chat-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.chat-messages {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-right: 2px;
+}
+
+.chat-messages::-webkit-scrollbar {
+  width: 4px;
+}
+
+.chat-messages::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.16);
+  border-radius: 2px;
+}
+
+.chat-msg {
+  align-self: flex-start;
+  max-width: 94%;
+  padding: 6px 8px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.chat-msg.mine {
+  align-self: flex-end;
+  background: rgba(62, 207, 207, 0.12);
+  border-color: rgba(62, 207, 207, 0.3);
+}
+
+.chat-author {
+  font-size: 10px;
+  color: var(--text-dim);
+  margin-bottom: 2px;
+  font-weight: 700;
+}
+
+.chat-msg.mine .chat-author {
+  color: var(--team-ns);
+}
+
+.chat-text {
+  font-size: 12px;
+  line-height: 1.35;
+  color: var(--text);
+  word-break: break-word;
+}
+
+.chat-input-row {
+  display: flex;
+  gap: 6px;
+}
+
+#chat-input {
+  flex: 1;
+  min-width: 0;
+  padding: 9px 10px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: var(--bg-medium);
+  color: var(--text);
+  font-family: var(--font-body);
+  font-size: 12px;
+}
+
+#chat-input:focus {
+  outline: none;
+  border-color: var(--gold);
+}
+
+#chat-input::placeholder {
+  color: var(--text-dim);
+}
+
+#btn-chat-send {
+  padding: 8px 10px;
+  min-width: 84px;
+}
+
 /* ============================================================
    BIDDING PANEL
    ============================================================ */
@@ -1541,8 +1706,15 @@ body {
   #messages {
     top: auto;
     right: 10px;
-    bottom: 12px;
+    bottom: 258px;
     width: min(280px, calc(100vw - 20px));
+  }
+
+  #chat-panel {
+    right: 8px;
+    bottom: 8px;
+    width: min(300px, calc(100vw - 16px));
+    height: 232px;
   }
 
   .table-side-panel {
@@ -1617,8 +1789,23 @@ body {
   #messages {
     left: 10px;
     right: 10px;
+    bottom: 216px;
     width: auto;
     max-width: none;
+  }
+
+  #chat-panel {
+    left: 8px;
+    right: 8px;
+    bottom: 8px;
+    width: auto;
+    height: 200px;
+    border-radius: 14px;
+    padding: 8px;
+  }
+
+  #chat-input {
+    font-size: 16px;
   }
 
   .table-side-panel {
@@ -1629,6 +1816,16 @@ body {
 
   .lobby-container h1 {
     font-size: 2.2em;
+  }
+
+  .brand-logo-lobby {
+    width: min(170px, 54vw);
+    margin-bottom: 8px;
+  }
+
+  .brand-logo-waiting {
+    width: min(142px, 44vw);
+    margin-bottom: 6px;
   }
 
   .table-layout {
@@ -1694,4 +1891,399 @@ body {
     padding: 8px 10px;
     gap: 3px;
   }
+}
+
+/* ============================================================
+   PHONE CHAT TOGGLE
+   - Mobile only: chat opens via a button, overlays the game
+   - Semi-transparent (75%) so the table stays visible behind
+   - Desktop UI unchanged
+   ============================================================ */
+
+@media (max-width: 600px) {
+  /* Phone top HUD background */
+  #mobile-top-panel {
+    display: block;
+    position: fixed;
+    left: 0;
+    right: 0;
+    top: 0;
+    height: calc(env(safe-area-inset-top, 0px) + 156px);
+    z-index: 8;
+    pointer-events: none;
+  }
+
+  #mobile-top-panel::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: var(--bg-card-panel);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    backdrop-filter: blur(10px);
+  }
+
+  /* Reposition the existing HUD elements into the top area (no DOM duplication). */
+  #scoreboard {
+    top: calc(env(safe-area-inset-top, 0px) + 10px);
+    left: 10px;
+    transform: none;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 10px 14px;
+    font-size: 16px;
+    z-index: 10;
+  }
+
+  /* Round points (current hand) anchored under the match scoreboard */
+  #round-points {
+    top: calc(env(safe-area-inset-top, 0px) + 92px);
+    left: 10px;
+    bottom: auto;
+    right: auto;
+    transform: none;
+    padding: 8px 12px;
+    font-size: 12px;
+    gap: 12px;
+    z-index: 10;
+  }
+
+  .score-separator {
+    display: none;
+  }
+
+  #contract-info {
+    top: calc(env(safe-area-inset-top, 0px) + 10px);
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 10;
+    max-width: min(60vw, 360px);
+    text-align: center;
+  }
+
+  .table-side-panel {
+    position: fixed;
+    top: calc(env(safe-area-inset-top, 0px) + 10px);
+    right: 10px;
+    left: auto;
+    width: 190px;
+    z-index: 10;
+  }
+
+  /* Table play area should start below the top HUD */
+  .table-layout {
+    padding-top: calc(env(safe-area-inset-top, 0px) + 176px);
+  }
+
+  /* Keep last trick compact in the phone top HUD */
+  .last-trick-panel {
+    padding: 6px 8px;
+  }
+
+  .last-trick-area {
+    width: 96px;
+    height: 96px;
+  }
+
+  .last-trick-area .card.trick-played {
+    width: 32px;
+    height: 46px;
+  }
+
+  /* Allow collapsing "Dernier pli" on phone */
+  .last-trick-title {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 0;
+  }
+
+  .last-trick-title::after {
+    content: '▾';
+    font-size: 12px;
+    color: var(--text-muted);
+  }
+
+  body.mobile-lasttrick-collapsed .last-trick-area {
+    display: none;
+  }
+
+  body.mobile-lasttrick-collapsed .last-trick-title::after {
+    content: '▸';
+  }
+
+  /* Round history: collapsed by default, expandable on demand */
+  #round-history-panel {
+    max-height: 36px;
+    overflow: hidden;
+  }
+
+  #round-history-panel .round-history-title {
+    margin-bottom: 0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+
+  #round-history-panel .round-history-title::after {
+    content: '▾';
+    font-size: 12px;
+    color: var(--text-muted);
+  }
+
+  #round-history-list {
+    display: none;
+  }
+
+  body.mobile-history-open #round-history-panel {
+    max-height: min(46vh, 420px);
+  }
+
+  body.mobile-history-open #round-history-list {
+    display: flex;
+    max-height: min(40vh, 360px);
+    overflow-y: auto;
+  }
+
+  body.mobile-history-open #round-history-panel .round-history-title::after {
+    content: '▴';
+  }
+
+  #chat-panel {
+    display: none;
+    /* Use existing theme primitive, but less opaque so the game stays visible behind. */
+    background: transparent;
+    position: fixed;
+    left: 10px;
+    right: 10px;
+    top: auto;
+    bottom: calc(env(safe-area-inset-bottom, 0px) + 84px);
+    width: auto;
+    height: 240px;
+    z-index: 18;
+  }
+
+  #chat-panel::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: var(--bg-card-panel);
+    opacity: 0.75;
+    border-radius: inherit;
+    pointer-events: none;
+  }
+
+  #chat-panel > * {
+    position: relative;
+    z-index: 1;
+  }
+
+  body.chat-open #chat-panel {
+    display: flex;
+  }
+
+  .chat-close-btn {
+    display: inline-flex;
+  }
+
+  .chat-open-btn {
+    display: inline-flex;
+    position: fixed;
+    left: 10px;
+    bottom: calc(env(safe-area-inset-bottom, 0px) + 14px);
+    z-index: 18;
+  }
+
+  body.chat-open .chat-open-btn {
+    display: none;
+  }
+}
+
+/* ============================================================
+   MOBILE PORTRAIT GAMEPLAY OVERRIDES
+   - Show only my hand at the bottom
+   - Keep trick area centered
+   - Do not display other players' hands
+   - Center bidding panel (avoid covering the announcer's hand)
+   ============================================================ */
+
+@media (max-width: 600px) and (orientation: portrait) {
+  /* Do not display other players' hands (card backs). */
+  #hand-nord,
+  #hand-est,
+  #hand-ouest {
+    display: none !important;
+  }
+
+  /* Reserve space at the bottom so the player's hand remains visible. */
+  .table-layout {
+    padding-bottom: 230px;
+    grid-template-rows: 85px 1fr 24px;
+  }
+
+  /* Keep the player's hand visually anchored at the bottom. */
+  .player-south.my-area {
+    position: fixed;
+    left: 8px;
+    right: 8px;
+    bottom: calc(env(safe-area-inset-bottom, 0px) + 8px);
+    z-index: 16;
+  }
+
+  /* Reserve space for the mobile chat button so it doesn't cover cards. */
+  .player-south.my-area .my-hand {
+    padding-left: 56px;
+  }
+
+  /* Reduce vertical clutter for opponents since their hands are hidden. */
+  .player-north .player-info,
+  .player-west .player-info,
+  .player-east .player-info {
+    margin-bottom: 0;
+  }
+
+  /* Move overlays above the reserved hand area (avoid covering cards). */
+  /* Mobile chat placement (portrait gameplay): keep it above the reserved hand area. */
+  #chat-panel {
+    top: auto;
+    bottom: calc(env(safe-area-inset-bottom, 0px) + 248px);
+    left: 8px;
+    right: 8px;
+    width: auto;
+    height: 200px;
+  }
+
+  #messages {
+    bottom: calc(env(safe-area-inset-bottom, 0px) + 440px);
+  }
+
+  /* Bidding panel: keep it centered (override the 480px bottom sheet). */
+  #bidding-panel {
+    left: 50%;
+    top: 50%;
+    right: auto;
+    bottom: auto;
+    width: min(92vw, 320px);
+    transform: translate(-50%, -50%);
+    max-height: calc(100vh - 300px);
+    border-radius: var(--radius-lg);
+  }
+}
+
+/* ============================================================
+   PHONE DARK MODE
+   - Avoid browser auto darkening on the game screen
+   - Dark violet lobby with light text (phone only)
+   ============================================================ */
+
+@media (max-width: 600px) and (prefers-color-scheme: dark) {
+  /* Opt into dark color-scheme only for the lobby (the game stays in light scheme). */
+  #lobby {
+    color-scheme: dark;
+  }
+
+  #lobby {
+    background:
+      radial-gradient(circle at 18% 18%, rgba(212, 168, 67, 0.16) 0%, rgba(212, 168, 67, 0) 42%),
+      radial-gradient(circle at 84% 84%, rgba(62, 207, 207, 0.12) 0%, rgba(62, 207, 207, 0) 44%),
+      linear-gradient(150deg, var(--bg-dark) 0%, var(--bg-medium) 55%, var(--bg-light) 100%);
+  }
+
+  #lobby::before {
+    background-image:
+      linear-gradient(120deg, rgba(0, 0, 0, 0.35) 0%, rgba(0, 0, 0, 0) 55%),
+      repeating-linear-gradient(35deg, rgba(255, 255, 255, 0.04) 0 10px, rgba(255, 255, 255, 0.02) 10px 20px);
+  }
+
+  #lobby::after {
+    background: radial-gradient(circle at 35% 35%, rgba(30, 30, 58, 0.65), rgba(30, 30, 58, 0));
+  }
+
+  .lobby-container {
+    background: var(--bg-card-panel);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    box-shadow: 0 32px 70px rgba(0, 0, 0, 0.55);
+    color: var(--text);
+  }
+
+  .lobby-container h1 {
+    background: none;
+    -webkit-text-fill-color: var(--text);
+    filter: none;
+  }
+
+  .subtitle {
+    color: var(--text);
+    opacity: 0.9;
+  }
+
+  .lobby-form input,
+  .lobby-form select {
+    background: var(--bg-medium);
+    color: var(--text);
+    border-color: rgba(255, 255, 255, 0.14);
+  }
+
+  .lobby-form input:focus,
+  .lobby-form select:focus {
+    border-color: var(--gold);
+    box-shadow: 0 0 0 3px rgba(212, 168, 67, 0.22);
+  }
+
+  .lobby-form input::placeholder {
+    color: var(--text-dim);
+  }
+
+  .action-group {
+    background: var(--bg-medium);
+    border-color: rgba(255, 255, 255, 0.10);
+    box-shadow: none;
+  }
+
+  .action-group:hover {
+    border-color: rgba(255, 255, 255, 0.16);
+    box-shadow: 0 10px 28px rgba(0, 0, 0, 0.35);
+  }
+
+  .action-group h3 {
+    color: var(--text);
+    opacity: 0.92;
+  }
+
+  .separator {
+    color: var(--text-muted);
+    background: rgba(0, 0, 0, 0.25);
+    border-color: rgba(255, 255, 255, 0.10);
+  }
+
+  #lobby .btn-primary {
+    background: linear-gradient(135deg, var(--gold), #b8942f);
+    color: #1a1000;
+    box-shadow: 0 8px 18px rgba(212, 168, 67, 0.22);
+  }
+
+  #lobby .btn-secondary {
+    background: var(--bg-light);
+    border-color: rgba(255, 255, 255, 0.10);
+    color: var(--text);
+  }
+}
+
+@media (forced-colors: active) {
+  #game-table,
+  #game-table * {
+    forced-color-adjust: none;
+  }
+}
+
+/* Some mobile browsers (Samsung Internet / vendor features) may apply forced darkening.
+   We can't fully override a user-forced filter, but we can strongly hint to keep the
+   game area in a light color scheme and avoid inherited transforms/filters. */
+#game-table,
+#game-table * {
+  color-scheme: light;
+  forced-color-adjust: none;
+  filter: none;
 }

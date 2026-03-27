@@ -233,6 +233,27 @@ io.on('connection', (socket) => {
     socket.emit('available-positions', { positions: available });
   });
 
+  socket.on('chat-message', (data) => {
+    if (!currentRoom) return;
+    const game = games.get(currentRoom);
+    if (!game) return;
+
+    const position = game.getPlayerPosition(socket.id);
+    if (!position) return;
+
+    const rawText = typeof data?.text === 'string' ? data.text : '';
+    const text = rawText.replace(/\s+/g, ' ').trim().slice(0, 180);
+    if (!text) return;
+
+    const senderName = game.players[position]?.name || playerName || 'Joueur';
+    io.to(currentRoom).emit('chat-message', {
+      from: senderName,
+      position,
+      text,
+      timestamp: Date.now()
+    });
+  });
+
   socket.on('disconnect', () => {
     console.log(`Joueur déconnecté: ${socket.id}`);
     if (currentRoom) {

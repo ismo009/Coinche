@@ -701,25 +701,29 @@ class CoincheGame {
     if (this.contract.coinched) multiplier = 2;
     if (this.contract.surcoinched) multiplier = 3;
     const contractBonus = this.contract.points * multiplier;
+    const isSpecialBid = this.contract.points === 250 || this.contract.points === 270 || this.contract.points === 500;
+    const capotWithoutSpecialBid = !isSpecialBid && this.tricksTaken[defenseTeam].length === 0;
 
     if (contractMet) {
       // Le contrat est réussi
       if (contractTeam === 'ns') {
-        if (this.contract.points === 250 || this.contract.points === 500) {
-          scoreNS = contractBonus + belotePoints.ns;
-        } else if (this.contract.points === 270) {
-          // Capot beloté: 270 inclut déjà la belote
-          scoreNS = contractBonus;
+        if (this.contract.points === 250 || this.contract.points === 270 || this.contract.points === 500) {
+          // Annonces spéciales: annonce + points faits
+          scoreNS = contractPoints + contractBonus;
+        } else if (capotWithoutSpecialBid) {
+          // Capot non annoncé: 252 + points de l'annonce
+          scoreNS = 252 + contractBonus;
         } else {
           scoreNS = contractPoints + contractBonus;
         }
         scoreEO = defensePoints;
       } else {
-        if (this.contract.points === 250 || this.contract.points === 500) {
-          scoreEO = contractBonus + belotePoints.eo;
-        } else if (this.contract.points === 270) {
-          // Capot beloté: 270 inclut déjà la belote
-          scoreEO = contractBonus;
+        if (this.contract.points === 250 || this.contract.points === 270 || this.contract.points === 500) {
+          // Annonces spéciales: annonce + points faits
+          scoreEO = contractPoints + contractBonus;
+        } else if (capotWithoutSpecialBid) {
+          // Capot non annoncé: 252 + points de l'annonce
+          scoreEO = 252 + contractBonus;
         } else {
           scoreEO = contractPoints + contractBonus;
         }
@@ -738,6 +742,7 @@ class CoincheGame {
       }
     }
 
+    // Arrondi des scores comme avant (a la dizaine)
     scoreNS = roundScore(scoreNS);
     scoreEO = roundScore(scoreEO);
 

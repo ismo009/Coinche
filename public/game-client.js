@@ -37,6 +37,146 @@ const screens = {
   game: document.getElementById('game-table')
 };
 
+const chatElements = {
+  container: document.getElementById('chat-messages'),
+  input: document.getElementById('chat-input'),
+  send: document.getElementById('btn-chat-send')
+};
+
+const chatUi = {
+  panel: document.getElementById('chat-panel'),
+  openBtn: document.getElementById('btn-chat-open'),
+  closeBtn: document.getElementById('btn-chat-close')
+};
+
+const CHAT_MAX_MESSAGES = 120;
+const PANEL_POS_STORAGE_PREFIX = 'coinche-panel-pos:';
+
+function isMobilePortraitGameplay() {
+  // Matches the CSS breakpoint used for portrait-phone gameplay overrides.
+  return window.matchMedia && window.matchMedia('(max-width: 600px) and (orientation: portrait)').matches;
+}
+
+function isPhoneUi() {
+  return window.matchMedia && window.matchMedia('(max-width: 600px)').matches;
+}
+
+function resetPanelsForPhoneUi() {
+  if (!isPhoneUi()) return;
+
+  const panels = [
+    document.querySelector('.table-side-panel'),
+    document.getElementById('chat-panel'),
+    document.getElementById('bidding-panel')
+  ].filter(Boolean);
+
+  for (const panel of panels) {
+    panel.style.left = '';
+    panel.style.top = '';
+    panel.style.right = '';
+    panel.style.bottom = '';
+    panel.style.transform = '';
+  }
+}
+
+function initMobileChatToggle() {
+  if (!chatUi.panel || !chatUi.openBtn || !chatUi.closeBtn) return;
+
+  const openChat = () => {
+    document.body.classList.add('chat-open');
+    // Focus the input on mobile for quicker chatting.
+    setTimeout(() => chatElements.input?.focus(), 0);
+  };
+
+  const closeChat = () => {
+    document.body.classList.remove('chat-open');
+  };
+
+  chatUi.openBtn.addEventListener('click', openChat);
+  chatUi.closeBtn.addEventListener('click', closeChat);
+
+  // Prevent the close button from acting as a drag handle on desktop.
+  chatUi.closeBtn.addEventListener('mousedown', (e) => {
+    e.stopPropagation();
+  });
+
+  // Default behavior: on phones, start with chat closed.
+  let wasPhone = isPhoneUi();
+  if (wasPhone) {
+    closeChat();
+    resetPanelsForPhoneUi();
+  }
+
+  // If the viewport changes (rotate / resize), only enforce the default closed state
+  // when transitioning from non-phone -> phone layout.
+  window.addEventListener('resize', () => {
+    const nowPhone = isPhoneUi();
+    if (nowPhone && !wasPhone) {
+      closeChat();
+      resetPanelsForPhoneUi();
+    }
+    wasPhone = nowPhone;
+  });
+}
+
+initMobileChatToggle();
+
+function initMobileHistoryToggle() {
+  const title = document.querySelector('#round-history-panel .round-history-title');
+  if (!title) return;
+
+  const toggle = () => {
+    document.body.classList.toggle('mobile-history-open');
+  };
+
+  title.addEventListener('click', () => {
+    if (!isPhoneUi()) return;
+    toggle();
+  });
+
+  // Default behavior: on phones, start with history collapsed.
+  let wasPhone = isPhoneUi();
+  if (wasPhone) document.body.classList.remove('mobile-history-open');
+
+  window.addEventListener('resize', () => {
+    const nowPhone = isPhoneUi();
+    if (nowPhone && !wasPhone) {
+      document.body.classList.remove('mobile-history-open');
+    }
+    wasPhone = nowPhone;
+  });
+}
+
+initMobileHistoryToggle();
+
+function initMobileLastTrickToggle() {
+  const title = document.querySelector('#last-trick-panel .last-trick-title');
+  if (!title) return;
+
+  const toggle = () => {
+    document.body.classList.toggle('mobile-lasttrick-collapsed');
+  };
+
+  title.addEventListener('click', () => {
+    if (!isPhoneUi()) return;
+    toggle();
+  });
+
+  // Default behavior: on phones, show "Dernier pli" (not collapsed).
+  let wasPhone = isPhoneUi();
+  if (wasPhone) document.body.classList.remove('mobile-lasttrick-collapsed');
+
+  window.addEventListener('resize', () => {
+    const nowPhone = isPhoneUi();
+    if (nowPhone && !wasPhone) {
+      document.body.classList.remove('mobile-lasttrick-collapsed');
+    }
+    wasPhone = nowPhone;
+  });
+}
+
+initMobileLastTrickToggle();
+
 // Position mapping relative to player's perspective
 function getRelativePosition(pos) {
   // Maps absolute position to visual position on screen (always show "me" at bottom)
@@ -573,6 +713,164 @@ function createCardBacks(count) {
   return html;
 }
 
+// ---- Draggable UI panels ----
+function clampPanelToViewport(panel, left, top) {
+  const maxLeft = Math.max(0, window.innerWidth - panel.offsetWidth);
+  const maxTop = Math.max(0, window.innerHeight - panel.offsetHeight);
+  return {
+    left: Math.min(Math.max(0, left), maxLeft),
+    top: Math.min(Math.max(0, top), maxTop)
+  };
+}
+
+function savePanelPosition(storageKey, left, top) {
+  if (storageKey === 'bidding-panel' && isMobilePortraitGameplay()) return;
+  try {
+    localStorage.setItem(`${PANEL_POS_STORAGE_PREFIX}${storageKey}`, JSON.stringify({ left, top }));
+  } catch {
+    // Ignore storage failures (private mode, quota, etc.)
+  }
+}
+
+function loadPanelPosition(storageKey) {
+  try {
+    const raw = localStorage.getItem(`${PANEL_POS_STORAGE_PREFIX}${storageKey}`);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (typeof parsed.left !== 'number' || typeof parsed.top !== 'number') return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+function applySavedPanelPosition(panel, storageKey) {
+  if (!panel) return;
+  if (window.getComputedStyle(panel).position === 'static') return;
+
+  // On portrait phones, bidding panel must remain centered (avoid covering the player's hand).
+  // Inline positions from saved draggable state would override the CSS layout.
+  if (storageKey === 'bidding-panel' && isMobilePortraitGameplay()) {
+    panel.style.left = '';
+    panel.style.top = '';
+    panel.style.right = '';
+    panel.style.bottom = '';
+    panel.style.transform = '';
+    return;
+  }
+
+  const saved = loadPanelPosition(storageKey);
+  if (!saved) return;
+
+  panel.style.transform = 'none';
+  panel.style.right = 'auto';
+  panel.style.bottom = 'auto';
+
+  const clamped = clampPanelToViewport(panel, saved.left, saved.top);
+  panel.style.left = `${clamped.left}px`;
+  panel.style.top = `${clamped.top}px`;
+}
+
+function makePanelDraggable(panel, handleSelector, storageKey) {
+  if (!panel) return;
+
+  const handles = panel.querySelectorAll(handleSelector);
+  if (!handles || handles.length === 0) return;
+
+  applySavedPanelPosition(panel, storageKey);
+
+  const startDrag = (e) => {
+    if (e.button !== 0) return;
+    if (window.getComputedStyle(panel).position === 'static') return;
+
+    const rect = panel.getBoundingClientRect();
+    const dragOffsetX = e.clientX - rect.left;
+    const dragOffsetY = e.clientY - rect.top;
+
+    panel.style.transform = 'none';
+    panel.style.right = 'auto';
+    panel.style.bottom = 'auto';
+    panel.style.left = `${rect.left}px`;
+    panel.style.top = `${rect.top}px`;
+    panel.classList.add('dragging-panel');
+    document.body.classList.add('panel-dragging');
+
+    const onMove = (moveEvent) => {
+      const nextLeft = moveEvent.clientX - dragOffsetX;
+      const nextTop = moveEvent.clientY - dragOffsetY;
+      const clamped = clampPanelToViewport(panel, nextLeft, nextTop);
+      panel.style.left = `${clamped.left}px`;
+      panel.style.top = `${clamped.top}px`;
+    };
+
+    const onUp = () => {
+      panel.classList.remove('dragging-panel');
+      document.body.classList.remove('panel-dragging');
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+
+      const left = parseFloat(panel.style.left);
+      const top = parseFloat(panel.style.top);
+      if (!Number.isNaN(left) && !Number.isNaN(top)) {
+        savePanelPosition(storageKey, left, top);
+      }
+    };
+
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+    e.preventDefault();
+  };
+
+  handles.forEach((handle) => {
+    handle.addEventListener('mousedown', startDrag);
+  });
+
+  window.addEventListener('resize', () => {
+    if (window.getComputedStyle(panel).position === 'static') return;
+
+    if (storageKey === 'bidding-panel' && isMobilePortraitGameplay()) {
+      panel.style.left = '';
+      panel.style.top = '';
+      panel.style.right = '';
+      panel.style.bottom = '';
+      panel.style.transform = '';
+      return;
+    }
+
+    const currentLeft = parseFloat(panel.style.left);
+    const currentTop = parseFloat(panel.style.top);
+    if (Number.isNaN(currentLeft) || Number.isNaN(currentTop)) return;
+
+    const clamped = clampPanelToViewport(panel, currentLeft, currentTop);
+    panel.style.left = `${clamped.left}px`;
+    panel.style.top = `${clamped.top}px`;
+    savePanelPosition(storageKey, clamped.left, clamped.top);
+  });
+}
+
+function initDraggablePanels() {
+  // On phone UI we keep HUD/panels anchored by CSS.
+  if (isPhoneUi()) return;
+
+  makePanelDraggable(
+    document.querySelector('.table-side-panel'),
+    '.last-trick-title, .round-history-title',
+    'info-panel'
+  );
+  makePanelDraggable(
+    document.getElementById('chat-panel'),
+    '.chat-header',
+    'chat-panel'
+  );
+  makePanelDraggable(
+    document.getElementById('bidding-panel'),
+    'h3',
+    'bidding-panel'
+  );
+}
+
+initDraggablePanels();
+
 // ---- Screen management ----
 function showScreen(name) {
   Object.values(screens).forEach(s => s.classList.add('hidden'));
@@ -638,6 +936,7 @@ socket.on('room-created', (data) => {
   myRoom = data.roomId;
   myPosition = data.position;
   document.getElementById('room-code-display').textContent = data.roomId;
+  clearChat();
   showScreen('waiting');
 });
 
@@ -645,6 +944,7 @@ socket.on('room-joined', (data) => {
   myRoom = data.roomId;
   myPosition = data.position;
   document.getElementById('room-code-display').textContent = data.roomId;
+  clearChat();
   showScreen('waiting');
 });
 
@@ -654,6 +954,10 @@ socket.on('error-msg', (data) => {
 
 socket.on('message', (data) => {
   addMessage(data.text, data.type);
+});
+
+socket.on('chat-message', (data) => {
+  addChatMessage(data);
 });
 
 // game-state handled below with transition detection
@@ -666,6 +970,46 @@ function addMessage(text, type = 'info') {
   div.textContent = text;
   container.appendChild(div);
   setTimeout(() => div.remove(), 4000);
+}
+
+function clearChat() {
+  if (!chatElements.container) return;
+  chatElements.container.innerHTML = '';
+}
+
+function addChatMessage(data) {
+  if (!chatElements.container || !data) return;
+
+  const row = document.createElement('div');
+  const isMine = data.position && data.position === myPosition;
+  row.className = `chat-msg${isMine ? ' mine' : ''}`;
+
+  const author = document.createElement('div');
+  author.className = 'chat-author';
+  author.textContent = isMine ? 'Moi' : (data.from || 'Joueur');
+
+  const body = document.createElement('div');
+  body.className = 'chat-text';
+  body.textContent = data.text || '';
+
+  row.appendChild(author);
+  row.appendChild(body);
+  chatElements.container.appendChild(row);
+
+  while (chatElements.container.children.length > CHAT_MAX_MESSAGES) {
+    chatElements.container.removeChild(chatElements.container.firstChild);
+  }
+
+  chatElements.container.scrollTop = chatElements.container.scrollHeight;
+}
+
+function sendChatMessage() {
+  if (!chatElements.input) return;
+  const text = chatElements.input.value.replace(/\s+/g, ' ').trim();
+  if (!text) return;
+
+  socket.emit('chat-message', { text });
+  chatElements.input.value = '';
 }
 
 // ---- Game Display ----
@@ -1018,6 +1362,19 @@ document.getElementById('btn-new-game').addEventListener('click', () => {
   socket.emit('new-game');
   document.getElementById('round-result').classList.add('hidden');
 });
+
+if (chatElements.send) {
+  chatElements.send.addEventListener('click', sendChatMessage);
+}
+
+if (chatElements.input) {
+  chatElements.input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      sendChatMessage();
+    }
+  });
+}
 
 // Main game-state listener
 socket.on('game-state', (state) => {
