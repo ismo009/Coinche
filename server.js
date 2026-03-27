@@ -4,6 +4,7 @@ const { Server } = require('socket.io');
 const crypto = require('crypto');
 const path = require('path');
 const { CoincheGame, POSITIONS, getTeam } = require('./game');
+const botLogic = require('./ai/coinche-bot');
 
 const app = express();
 const server = http.createServer(app);
@@ -66,6 +67,107 @@ function formatBidPoints(points) {
 
 function getAvailablePositions(game) {
   return POSITIONS.filter(pos => !game.players[pos]);
+}
+
+function isBotPlayer(player) {
+  return !!player && player.isBot === true;
+}
+
+function isRoomOwner(game, socketId) {
+  // Owner is the first human who created the room.
+  return !!game && typeof game.ownerId === 'string' && game.ownerId === socketId;
+}
+
+function maybeProcessBotTurn(roomId) {
+  const game = games.get(roomId);
+  if (!game) return;
+
+  const currentPos = game.currentPlayer;
+  if (!currentPos) return;
+  const player = game.players[currentPos];
+  if (!isBotPlayer(player)) return;
+
+  // Small delay to keep UX smooth and avoid tight recursion.
+  setTimeout(() => {
+    const latest = games.get(roomId);
+    if (!latest) return;
+
+    const pos = latest.currentPlayer;
+    const p = latest.players[pos];
+    if (!isBotPlayer(p)) return;
+
+    if (latest.state === 'bidding') {
+      const bid = botLogic.chooseBid(latest);
+      const result = latest.placeBid(pos, bid);
+      if (result?.success) {
+        const botName = p.name || 'IA';
+        const suitNames = {
+          'coeur': '♥ Coeur', 'carreau': '♦ Carreau', 'trefle': '♣ Trèfle',
+          'pique': '♠ Pique', 'tout-atout': 'Tout Atout', 'sans-atout': 'Sans Atout'
+        };
+        if (bid.type === 'pass') {
+          broadcastMessage(roomId, `${botName} passe`);
+        } else if (bid.type === 'bid') {
+          broadcastMessage(roomId, `${botName} annonce ${formatBidPoints(bid.points)} ${suitNames[bid.suit] || bid.suit}`);
+        }
+
+        if (result.action === 'redistribute') {
+          latest.startNewRound();
+          broadcastMessage(roomId, 'Tout le monde a passé - redistribution !', 'warning');
+        }
+
+        if (result.action === 'play') {
+          const suitName = suitNames[latest.contract.suit] || latest.contract.suit;
+          let msg = `Contrat: ${formatBidPoints(latest.contract.points)} ${suitName} par ${latest.players[latest.contract.player].name}`;
+          if (latest.contract.coinched) msg += ' (COINCHÉ)';
+          if (latest.contract.surcoinched) msg += ' (SURCOINCÉ)';
+          broadcastMessage(roomId, msg, 'success');
+        }
+
+        broadcastGameState(roomId);
+        touchRoom(roomId);
+        maybeProcessBotTurn(roomId);
+      }
+      return;
+    }
+
+    if (latest.state === 'playing') {
+      const card = botLogic.chooseCard(latest, pos);
+      if (!card) return;
+
+      const result = latest.playCard(pos, card);
+      if (!result?.success) return;
+
+      const botName = p.name || 'IA';
+      broadcastMessage(roomId, `${botName} joue ${card.rank} de ${card.suit}`);
+
+      if (result.beloteAnnounce) {
+        broadcastMessage(roomId, `${botName}: ${result.beloteAnnounce} !`, 'success');
+      }
+
+      if (result.action === 'trick_complete') {
+        const winnerName = latest.players[result.winner].name;
+        broadcastMessage(roomId, `${winnerName} remporte le pli (+${result.points} pts)`);
+      }
+
+      if (result.action === 'round_end' || result.action === 'game_over') {
+        const rr = result.roundResult;
+        let msg = rr.contractMet ? '✓ Contrat réussi !' : '✗ Contrat chuté !';
+        msg += ` | NS: +${rr.scoreNS} | EO: +${rr.scoreEO}`;
+        broadcastMessage(roomId, msg, rr.contractMet ? 'success' : 'danger');
+
+        if (result.action === 'game_over') {
+          const teamNames = { ns: 'Nord-Sud', eo: 'Est-Ouest' };
+          const winnerTeam = teamNames[result.winner];
+          broadcastMessage(roomId, `🏆 ${winnerTeam} remporte la partie !`, 'success');
+        }
+      }
+
+      broadcastGameState(roomId);
+      touchRoom(roomId);
+      maybeProcessBotTurn(roomId);
+    }
+  }, 450);
 }
 
 function pickRandom(arr) {
@@ -142,6 +244,9 @@ io.on('connection', (socket) => {
       return;
     }
 
+    // Owner = creator (first human).
+    game.ownerId = socket.id;
+
     currentRoom = roomId;
     socket.join(roomId);
     socket.emit('room-created', { roomId, position, isPublic: false, displayCode: roomId });
@@ -189,6 +294,7 @@ io.on('connection', (socket) => {
       game.startNewRound();
       broadcastGameState(roomId);
       broadcastMessage(roomId, 'La partie commence ! Phase d\'enchères.', 'success');
+      maybeProcessBotTurn(roomId);
     }
   });
 
@@ -272,8 +378,48 @@ io.on('connection', (socket) => {
   socket.on('create-public-room', (data) => {
     playerName = (data?.name || 'Joueur').slice(0, 20);
     const room = createPublicRoom();
+    // Owner = creator (first human).
+    room.game.ownerId = socket.id;
     room.game.roomName = sanitizeRoomName(data?.roomName) || room.game.roomName;
     addSocketToPublicRoom({ createIfMissing: false, preferredRoomId: room.roomId, createdByPlayer: true });
+  });
+
+  socket.on('add-bot', (data) => {
+    if (!currentRoom) return;
+    const game = games.get(currentRoom);
+    if (!game) return;
+
+    if (!isRoomOwner(game, socket.id)) {
+      socket.emit('error-msg', { message: 'Seul le propriétaire de la room peut ajouter une IA.' });
+      return;
+    }
+
+    if (game.state !== 'waiting') {
+      socket.emit('error-msg', { message: 'Impossible d\'ajouter une IA après le démarrage.' });
+      return;
+    }
+
+    const availablePositions = getAvailablePositions(game);
+    const position = pickRandom(availablePositions);
+    if (!position) {
+      socket.emit('error-msg', { message: 'Aucune place disponible.' });
+      return;
+    }
+
+    const botName = (data?.name || 'IA').toString().slice(0, 20);
+    const botId = `BOT:${crypto.randomBytes(6).toString('hex')}`;
+    game.players[position] = { id: botId, name: botName, isBot: true };
+
+    broadcastMessage(currentRoom, `${botName} (IA) rejoint la salle (${position})`, 'info');
+    broadcastGameState(currentRoom);
+    touchRoom(currentRoom);
+
+    if (game.isFull() && game.state === 'waiting') {
+      game.startNewRound();
+      broadcastGameState(currentRoom);
+      broadcastMessage(currentRoom, 'La partie commence ! Phase d\'enchères.', 'success');
+      maybeProcessBotTurn(currentRoom);
+    }
   });
 
   socket.on('join-public-room', (data) => {
@@ -337,6 +483,7 @@ io.on('connection', (socket) => {
 
     broadcastGameState(currentRoom);
     touchRoom(currentRoom);
+    maybeProcessBotTurn(currentRoom);
   });
 
   socket.on('play-card', (data) => {
@@ -378,6 +525,7 @@ io.on('connection', (socket) => {
 
     broadcastGameState(currentRoom);
     touchRoom(currentRoom);
+    maybeProcessBotTurn(currentRoom);
   });
 
   socket.on('next-round', () => {
@@ -390,6 +538,7 @@ io.on('connection', (socket) => {
     broadcastGameState(currentRoom);
     broadcastMessage(currentRoom, 'Nouvelle manche ! Phase d\'enchères.');
     touchRoom(currentRoom);
+    maybeProcessBotTurn(currentRoom);
   });
 
   socket.on('new-game', () => {
@@ -406,6 +555,7 @@ io.on('connection', (socket) => {
     broadcastGameState(currentRoom);
     broadcastMessage(currentRoom, 'Nouvelle partie !', 'success');
     touchRoom(currentRoom);
+    maybeProcessBotTurn(currentRoom);
   });
 
   socket.on('get-available-positions', (data) => {
@@ -453,11 +603,26 @@ io.on('connection', (socket) => {
           broadcastMessage(currentRoom, `${playerName || 'Un joueur'} a quitté la salle`);
           broadcastGameState(currentRoom);
 
-          // Supprimer la salle si vide
+          // Supprimer la salle si vide (aucun joueur) OU si plus aucun humain n'est présent.
           const hasPlayers = POSITIONS.some(p => game.players[p]);
-          if (!hasPlayers) {
+          const hasHumanPlayers = POSITIONS.some(p => {
+            const pl = game.players[p];
+            return !!pl && pl.isBot !== true;
+          });
+
+          if (!hasPlayers || !hasHumanPlayers) {
+            // Inform remaining human sockets (if any) that the room is closing.
+            for (const p of POSITIONS) {
+              const pl = game.players[p];
+              if (!pl || pl.isBot === true) continue;
+              io.to(pl.id).emit('error-msg', { message: 'Salle fermée (plus aucun joueur humain).' });
+              if (game.isPublic) {
+                io.to(pl.id).emit('public-room-closed', { roomId: currentRoom });
+              }
+            }
+
             games.delete(currentRoom);
-            console.log(`Salle ${currentRoom} supprimée (vide)`);
+            console.log(`Salle ${currentRoom} supprimée (plus aucun humain)`);
           }
         }
       }

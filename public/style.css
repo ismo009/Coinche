@@ -464,6 +464,15 @@ body {
   border-radius: 2px;
 }
 
+.lobby-made-by {
+  margin-top: 4px;
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  color: rgba(39, 72, 85, 0.82);
+  font-weight: 600;
+  text-align: center;
+}
+
 .public-room-entry {
   display: grid;
   grid-template-columns: 1fr minmax(140px, 42%);
@@ -2041,13 +2050,14 @@ body.chat-collapsed .chat-open-btn {
   }
 
   .lobby-container h1 {
-    font-size: 2.35rem;
-    letter-spacing: 0.01em;
+    font-size: 2.2rem;
+    letter-spacing: 0.015em;
+    font-weight: 700;
   }
 
   .lobby-container {
-    padding: 24px 14px 18px;
-    border-radius: 24px;
+    padding: 22px 14px 16px;
+    border-radius: 20px;
   }
 
   .lobby-form {
@@ -2056,6 +2066,15 @@ body.chat-collapsed .chat-open-btn {
 
   .action-group {
     padding: 16px 12px;
+    gap: 10px;
+  }
+
+  .action-group .btn {
+    font-size: 14px;
+    font-weight: 600;
+    padding: 12px 16px;
+    min-height: 44px;
+    border-radius: 8px;
   }
 
   .public-menu {
@@ -2065,59 +2084,65 @@ body.chat-collapsed .chat-open-btn {
   .public-rooms-header {
     flex-direction: column;
     align-items: stretch;
+    gap: 10px;
   }
 
   .brand-logo-lobby {
-    width: min(170px, 54vw);
-    margin-bottom: 8px;
+    width: min(160px, 50vw);
+    margin-bottom: 10px;
   }
 
   .brand-logo-waiting {
-    width: min(142px, 44vw);
-    margin-bottom: 6px;
+    width: min(138px, 42vw);
+    margin-bottom: 8px;
   }
 
   .table-layout {
     grid-template-columns: 60px 1fr 60px;
-    grid-template-rows: 85px 1fr 165px;
+    grid-template-rows: 90px 1fr 160px;
+    gap: 0;
   }
 
   .card {
-    width: 48px;
-    height: 70px;
+    width: 50px;
+    height: 72px;
   }
 
   .card .card-suit-icon {
-    font-size: 17px;
+    font-size: 18px;
   }
 
   .card .card-rank {
-    font-size: 11px;
+    font-size: 12px;
+    font-weight: 700;
   }
 
   .card .card-corner,
   .card .card-corner-bottom {
-    font-size: 8px;
+    font-size: 9px;
   }
 
   .trick-area {
-    width: 160px;
-    height: 160px;
+    width: 150px;
+    height: 150px;
+    border-radius: 12px;
+    background: rgba(0, 0, 0, 0.15);
+    border: 1px solid rgba(255, 255, 255, 0.05);
   }
 
   .last-trick-area {
-    width: 120px;
-    height: 120px;
+    width: 110px;
+    height: 110px;
   }
 
   .last-trick-area .card.trick-played {
-    width: 40px;
-    height: 58px;
+    width: 38px;
+    height: 54px;
   }
 
   .card.trick-played {
-    width: 45px;
-    height: 65px;
+    width: 44px;
+    height: 64px;
   }
 
   #bidding-panel {
@@ -2129,16 +2154,52 @@ body.chat-collapsed .chat-open-btn {
     width: 100%;
     transform: none;
     border-radius: var(--radius-lg) var(--radius-lg) 0 0;
-    max-height: 50vh;
+    max-height: 55vh;
+    padding: 14px 14px calc(env(safe-area-inset-bottom, 0px) + 12px);
+  }
+
+  #bidding-panel h3 {
+    font-size: 15px;
+    font-weight: 700;
+    margin-bottom: 14px;
+  }
+
+  .bid-row {
+    gap: 10px;
+    margin-bottom: 10px;
+  }
+
+  .bid-row .bid-value {
+    padding: 10px 14px;
+    font-size: 12px;
+    font-weight: 600;
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+  }
+
+  .bid-row .btn {
+    padding: 12px 16px;
+    font-size: 13px;
+    font-weight: 600;
+    min-height: 44px;
+    border-radius: 8px;
+    transition: all 0.2s ease;
+  }
+
+  .bid-row .btn:active {
+    transform: scale(0.98);
   }
 
   #game-table {
-    border-width: 3px;
+    border-width: 2px;
+    border-radius: 16px;
   }
 
   .my-hand {
-    padding: 8px 10px;
-    gap: 3px;
+    padding: 10px 12px;
+    gap: 5px;
+    justify-content: center;
   }
 }
 
@@ -2158,7 +2219,7 @@ body.chat-collapsed .chat-open-btn {
     left: 0;
     right: 0;
     top: 0;
-    height: calc(env(safe-area-inset-top, 0px) + 156px);
+    height: calc(env(safe-area-inset-top, 0px) + 160px);
     z-index: 8;
     pointer-events: none;
   }
@@ -2167,35 +2228,39 @@ body.chat-collapsed .chat-open-btn {
     content: '';
     position: absolute;
     inset: 0;
-    background: var(--bg-card-panel);
-    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
-    backdrop-filter: blur(10px);
+    background: linear-gradient(to bottom, rgba(20, 20, 40, 0.95), rgba(15, 15, 35, 0.85));
+    border-bottom: 1px solid rgba(212, 168, 67, 0.1);
+    backdrop-filter: blur(12px);
   }
 
   /* Reposition the existing HUD elements into the top area (no DOM duplication). */
   #scoreboard {
-    top: calc(env(safe-area-inset-top, 0px) + 10px);
+    top: calc(env(safe-area-inset-top, 0px) + 12px);
     left: 10px;
     transform: none;
     flex-direction: column;
     align-items: flex-start;
-    gap: 8px;
-    padding: 10px 14px;
-    font-size: 16px;
+    gap: 6px;
+    padding: 8px 12px;
+    font-size: 14px;
+    font-weight: 600;
     z-index: 10;
   }
 
   /* Round points (current hand) anchored under the match scoreboard */
   #round-points {
-    top: calc(env(safe-area-inset-top, 0px) + 92px);
+    top: calc(env(safe-area-inset-top, 0px) + 80px);
     left: 10px;
     bottom: auto;
     right: auto;
     transform: none;
-    padding: 8px 12px;
-    font-size: 12px;
-    gap: 12px;
+    padding: 8px 10px;
+    font-size: 11px;
+    gap: 10px;
     z-index: 10;
+    background: rgba(0, 0, 0, 0.25);
+    border-radius: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.05);
   }
 
   .score-separator {
@@ -2203,31 +2268,42 @@ body.chat-collapsed .chat-open-btn {
   }
 
   #contract-info {
-    top: calc(env(safe-area-inset-top, 0px) + 10px);
+    top: calc(env(safe-area-inset-top, 0px) + 70px);
     left: 50%;
     transform: translateX(-50%);
     z-index: 10;
-    max-width: min(60vw, 360px);
+    max-width: min(85vw, 380px);
     text-align: center;
+    background: rgba(0, 0, 0, 0.35);
+    padding: 10px 14px;
+    border-radius: 10px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    font-size: 12px;
+    font-weight: 600;
+    backdrop-filter: blur(8px);
   }
 
   .table-side-panel {
     position: fixed;
-    top: calc(env(safe-area-inset-top, 0px) + 10px);
+    top: calc(env(safe-area-inset-top, 0px) + 12px);
     right: 10px;
     left: auto;
-    width: 190px;
+    width: auto;
+    max-width: 200px;
     z-index: 10;
   }
 
   /* Table play area should start below the top HUD */
   .table-layout {
-    padding-top: calc(env(safe-area-inset-top, 0px) + 176px);
+    padding-top: calc(env(safe-area-inset-top, 0px) + 180px);
   }
 
   /* Keep last trick compact in the phone top HUD */
   .last-trick-panel {
-    padding: 6px 8px;
+    padding: 8px 10px;
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.05);
   }
 
   .last-trick-area {
@@ -2246,7 +2322,11 @@ body.chat-collapsed .chat-open-btn {
     align-items: center;
     justify-content: space-between;
     gap: 8px;
-    margin-bottom: 0;
+    margin-bottom: 4px;
+    font-size: 11px;
+    font-weight: 700;
+    cursor: pointer;
+    user-select: none;
   }
 
   .last-trick-title::after {
@@ -2393,6 +2473,18 @@ body.chat-collapsed .chat-open-btn {
   .player-west .player-info,
   .player-east .player-info {
     margin-bottom: 0;
+    font-size: 12px;
+    gap: 4px;
+  }
+
+  .player-info .player-name {
+    font-weight: 700;
+    font-size: 12px;
+  }
+
+  .card-count {
+    font-size: 10px;
+    opacity: 0.8;
   }
 
   /* Move overlays above the reserved hand area (avoid covering cards). */
@@ -2416,10 +2508,23 @@ body.chat-collapsed .chat-open-btn {
     top: 50%;
     right: auto;
     bottom: auto;
-    width: min(92vw, 320px);
+    width: min(90vw, 340px);
     transform: translate(-50%, -50%);
-    max-height: calc(100vh - 300px);
-    border-radius: var(--radius-lg);
+    max-height: calc(100vh - 320px);
+    border-radius: 12px;
+    padding: 16px 14px;
+  }
+
+  #bidding-panel h3 {
+    font-size: 15px;
+    margin-bottom: 12px;
+    font-weight: 700;
+  }
+
+  .bid-row .btn {
+    min-height: 40px;
+    border-radius: 8px;
+    font-weight: 600;
   }
 }
 
