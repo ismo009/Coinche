@@ -49,8 +49,14 @@ const chatUi = {
   closeBtn: document.getElementById('btn-chat-close')
 };
 
+const publicRoomsUi = {
+  list: document.getElementById('public-rooms-list'),
+  refreshBtn: document.getElementById('btn-public-refresh')
+};
+
 const CHAT_MAX_MESSAGES = 120;
 const PANEL_POS_STORAGE_PREFIX = 'coinche-panel-pos:';
+const PUBLIC_ROOMS_REFRESH_MS = 10000;
 
 function isMobilePortraitGameplay() {
   // Matches the CSS breakpoint used for portrait-phone gameplay overrides.
@@ -901,6 +907,36 @@ document.getElementById('btn-join').addEventListener('click', () => {
   socket.emit('join-room', { name, roomId, position });
 });
 
+const publicCreateBtn = document.getElementById('btn-public-create');
+if (publicCreateBtn) {
+  publicCreateBtn.addEventListener('click', () => {
+    const name = document.getElementById('player-name').value.trim() || 'Joueur';
+    socket.emit('create-public-room', { name });
+  });
+}
+
+const publicJoinBtn = document.getElementById('btn-public-join');
+if (publicJoinBtn) {
+  publicJoinBtn.addEventListener('click', () => {
+    requestPublicRooms();
+  });
+}
+
+if (publicRoomsUi.refreshBtn) {
+  publicRoomsUi.refreshBtn.addEventListener('click', () => {
+    requestPublicRooms();
+  });
+}
+
+const quickPlayBtn = document.getElementById('btn-quick-play');
+if (quickPlayBtn) {
+  // Compatibilite si l'ancien bouton est encore present
+  quickPlayBtn.addEventListener('click', () => {
+    const name = document.getElementById('player-name').value.trim() || 'Joueur';
+    socket.emit('join-public-room', { name });
+  });
+}
+
 // Update available positions when typing room code
 document.getElementById('room-code').addEventListener('input', (e) => {
   const code = e.target.value.trim();
@@ -908,6 +944,65 @@ document.getElementById('room-code').addEventListener('input', (e) => {
     socket.emit('get-available-positions', { roomId: code });
   }
 });
+
+function requestPublicRooms() {
+  socket.emit('list-public-rooms');
+}
+
+function renderPublicRooms(rooms) {
+  if (!publicRoomsUi.list) return;
+
+  publicRoomsUi.list.innerHTML = '';
+
+  if (!Array.isArray(rooms) || rooms.length === 0) {
+    publicRoomsUi.list.innerHTML = '<div class="public-rooms-empty">Aucune salle publique disponible pour le moment.</div>';
+    return;
+  }
+
+  for (const room of rooms) {
+    const row = document.createElement('div');
+    row.className = 'public-room-entry';
+
+    const meta = document.createElement('div');
+    meta.className = 'public-room-meta';
+    meta.innerHTML = `
+      <div class="public-room-title">${room.roomName || room.displayCode || room.roomId}</div>
+      <div class="public-room-subtitle">${room.playerCount}/4 joueurs · ${room.freeSeats} place(s) libre(s)</div>
+    `;
+
+    const joinBtn = document.createElement('button');
+    joinBtn.className = 'btn btn-secondary btn-sm';
+    joinBtn.type = 'button';
+    joinBtn.textContent = 'Rejoindre';
+    joinBtn.addEventListener('click', () => {
+      const name = document.getElementById('player-name').value.trim() || 'Joueur';
+      socket.emit('join-public-room', { name, roomId: room.roomId });
+    });
+
+    row.appendChild(meta);
+    row.appendChild(joinBtn);
+    publicRoomsUi.list.appendChild(row);
+  }
+}
+
+socket.on('public-rooms', (data) => {
+  renderPublicRooms(data?.rooms || []);
+});
+
+socket.on('public-room-closed', () => {
+  myRoom = null;
+  myPosition = null;
+  gameState = null;
+  showScreen('lobby');
+  requestPublicRooms();
+});
+
+setInterval(() => {
+  if (!screens?.lobby || screens.lobby.classList.contains('hidden')) return;
+  requestPublicRooms();
+}, PUBLIC_ROOMS_REFRESH_MS);
+
+requestPublicRooms();
 
 socket.on('available-positions', (data) => {
   const select = document.getElementById('join-position');
@@ -931,11 +1026,29 @@ function showError(msg) {
   setTimeout(() => el.classList.add('hidden'), 3000);
 }
 
+function updateWaitingRoomRoomInfo(data) {
+  const display = document.getElementById('room-code-display');
+  const help = document.getElementById('waiting-room-help');
+  const isPublic = !!data?.isPublic;
+
+  if (display) {
+    display.textContent = isPublic
+      ? (data.roomName || data.displayCode || data.roomId || '')
+      : (data.displayCode || data.roomId || '');
+  }
+
+  if (help) {
+    help.textContent = isPublic
+      ? 'Partagez ce nom de salle avec vos amis !'
+      : 'Partagez ce code de salle avec vos amis !';
+  }
+}
+
 // ---- Socket events ----
 socket.on('room-created', (data) => {
   myRoom = data.roomId;
   myPosition = data.position;
-  document.getElementById('room-code-display').textContent = data.roomId;
+  updateWaitingRoomRoomInfo(data);
   clearChat();
   showScreen('waiting');
 });
@@ -943,7 +1056,7 @@ socket.on('room-created', (data) => {
 socket.on('room-joined', (data) => {
   myRoom = data.roomId;
   myPosition = data.position;
-  document.getElementById('room-code-display').textContent = data.roomId;
+  updateWaitingRoomRoomInfo(data);
   clearChat();
   showScreen('waiting');
 });

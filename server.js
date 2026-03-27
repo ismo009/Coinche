@@ -13,9 +13,32 @@ app.use(express.static(path.join(__dirname, 'public')));
 
 // Stockage des parties en cours
 const games = new Map();
+const PUBLIC_ROOM_PREFIX = 'PUB-';
+const PUBLIC_INACTIVE_MS = 5 * 60 * 1000;
+const PUBLIC_CLEANUP_INTERVAL_MS = 30 * 1000;
+
+const ROOM_NAME_NOUNS = [
+  'Table', 'Salon', 'Atout', 'Belote', 'Coinche', 'Pli', 'Trèfle', 'Carreau', 'Pique', 'Cœur'
+];
+
+const ROOM_NAME_ADJECTIVES = [
+  'Azur', 'Émeraude', 'Saphir', 'Rubis', 'Ivoire', 'Velours', 'Lumière', 'Brume', 'Nova', 'Orage'
+];
 
 function generateRoomCode() {
   return crypto.randomBytes(3).toString('hex').toUpperCase().slice(0, 6);
+}
+
+function sanitizeRoomName(name) {
+  if (typeof name !== 'string') return '';
+  return name.replace(/\s+/g, ' ').trim().slice(0, 28);
+}
+
+function generateRoomName() {
+  const noun = ROOM_NAME_NOUNS[Math.floor(Math.random() * ROOM_NAME_NOUNS.length)];
+  const adjective = ROOM_NAME_ADJECTIVES[Math.floor(Math.random() * ROOM_NAME_ADJECTIVES.length)];
+  const suffix = Math.floor(Math.random() * 90) + 10;
+  return `${noun} ${adjective} ${suffix}`;
 }
 
 function broadcastGameState(roomId) {
@@ -41,6 +64,65 @@ function formatBidPoints(points) {
   return `${points}`;
 }
 
+function getAvailablePositions(game) {
+  return POSITIONS.filter(pos => !game.players[pos]);
+}
+
+function pickRandom(arr) {
+  if (!arr || arr.length === 0) return null;
+  return arr[Math.floor(Math.random() * arr.length)];
+}
+
+function findOpenPublicRoom() {
+  for (const [roomId, game] of games.entries()) {
+    if (!game.isPublic) continue;
+    if (game.state !== 'waiting') continue;
+    if (game.isFull()) continue;
+    return { roomId, game };
+  }
+  return null;
+}
+
+function createPublicRoom() {
+  const roomId = `${PUBLIC_ROOM_PREFIX}${generateRoomCode()}`;
+  const game = new CoincheGame(roomId);
+  game.isPublic = true;
+  game.roomName = generateRoomName();
+  game.createdAt = Date.now();
+  game.lastActivityAt = Date.now();
+  games.set(roomId, game);
+  return { roomId, game };
+}
+
+function touchRoom(roomId) {
+  const game = games.get(roomId);
+  if (game && game.isPublic) {
+    game.lastActivityAt = Date.now();
+  }
+}
+
+function getPublicRoomList() {
+  const rooms = [];
+  const now = Date.now();
+
+  for (const [roomId, game] of games.entries()) {
+    if (!game.isPublic) continue;
+    if (game.state !== 'waiting') continue;
+    if (game.isFull()) continue;
+
+    const playerCount = POSITIONS.filter(pos => !!game.players[pos]).length;
+    rooms.push({
+      roomId,
+      roomName: game.roomName || roomId.replace(PUBLIC_ROOM_PREFIX, ''),
+      playerCount,
+      freeSeats: 4 - playerCount,
+      idleSeconds: Math.max(0, Math.floor((now - (game.lastActivityAt || now)) / 1000))
+    });
+  }
+
+  return rooms;
+}
+
 io.on('connection', (socket) => {
   console.log(`Joueur connecté: ${socket.id}`);
 
@@ -62,9 +144,10 @@ io.on('connection', (socket) => {
 
     currentRoom = roomId;
     socket.join(roomId);
-    socket.emit('room-created', { roomId, position });
+    socket.emit('room-created', { roomId, position, isPublic: false, displayCode: roomId });
     broadcastGameState(roomId);
     broadcastMessage(roomId, `${playerName} a créé la salle (${position})`);
+    touchRoom(roomId);
   });
 
   socket.on('join-room', (data) => {
@@ -96,9 +179,10 @@ io.on('connection', (socket) => {
 
     currentRoom = roomId;
     socket.join(roomId);
-    socket.emit('room-joined', { roomId, position });
+    socket.emit('room-joined', { roomId, position, isPublic: false, displayCode: roomId });
     broadcastGameState(roomId);
     broadcastMessage(roomId, `${playerName} a rejoint la salle (${position})`);
+    touchRoom(roomId);
 
     // Démarrer si 4 joueurs
     if (game.isFull() && game.state === 'waiting') {
@@ -106,6 +190,106 @@ io.on('connection', (socket) => {
       broadcastGameState(roomId);
       broadcastMessage(roomId, 'La partie commence ! Phase d\'enchères.', 'success');
     }
+  });
+
+  function startIfRoomReady(roomId, game) {
+    if (game.isFull() && game.state === 'waiting') {
+      game.startNewRound();
+      broadcastGameState(roomId);
+      broadcastMessage(roomId, 'La partie commence ! Phase d\'enchères.', 'success');
+      touchRoom(roomId);
+    }
+  }
+
+  function addSocketToPublicRoom({ createIfMissing, preferredRoomId = null, createdByPlayer = false }) {
+    if (currentRoom) return;
+
+    let room = null;
+
+    if (preferredRoomId) {
+      const preferredGame = games.get(preferredRoomId);
+      if (!preferredGame || !preferredGame.isPublic || preferredGame.state !== 'waiting' || preferredGame.isFull()) {
+        socket.emit('error-msg', { message: 'Cette salle publique n\'est plus disponible.' });
+        return;
+      }
+      room = { roomId: preferredRoomId, game: preferredGame };
+    } else {
+      room = findOpenPublicRoom();
+    }
+
+    if (!room && createIfMissing) {
+      room = createPublicRoom();
+    }
+
+    if (!room) {
+      socket.emit('error-msg', { message: 'Aucune salle publique disponible. Créez-en une.' });
+      return;
+    }
+
+    const { roomId, game } = room;
+    const availablePositions = getAvailablePositions(game);
+    const position = pickRandom(availablePositions);
+
+    if (!position) {
+      socket.emit('error-msg', { message: 'Aucune place disponible, réessaie.' });
+      return;
+    }
+
+    if (!game.addPlayer(socket.id, playerName, position)) {
+      socket.emit('error-msg', { message: 'Impossible de rejoindre la salle publique.' });
+      return;
+    }
+
+    currentRoom = roomId;
+    socket.join(roomId);
+
+    const createdByThisPlayer = createdByPlayer || (createIfMissing && game.players[position] && Object.keys(game.players).length === 1);
+    if (createdByThisPlayer) {
+      socket.emit('room-created', {
+        roomId,
+        position,
+        isPublic: true,
+        roomName: game.roomName,
+        displayCode: game.roomName
+      });
+      broadcastMessage(roomId, `${playerName} a créé une salle publique (${position})`);
+    } else {
+      socket.emit('room-joined', {
+        roomId,
+        position,
+        isPublic: true,
+        roomName: game.roomName,
+        displayCode: game.roomName
+      });
+      broadcastMessage(roomId, `${playerName} rejoint la partie publique (${position})`);
+    }
+
+    broadcastGameState(roomId);
+    touchRoom(roomId);
+    startIfRoomReady(roomId, game);
+  }
+
+  socket.on('create-public-room', (data) => {
+    playerName = (data?.name || 'Joueur').slice(0, 20);
+    const room = createPublicRoom();
+    room.game.roomName = sanitizeRoomName(data?.roomName) || room.game.roomName;
+    addSocketToPublicRoom({ createIfMissing: false, preferredRoomId: room.roomId, createdByPlayer: true });
+  });
+
+  socket.on('join-public-room', (data) => {
+    playerName = (data?.name || 'Joueur').slice(0, 20);
+    const roomId = (data?.roomId || '').toUpperCase().trim();
+    addSocketToPublicRoom({ createIfMissing: false, preferredRoomId: roomId || null });
+  });
+
+  socket.on('list-public-rooms', () => {
+    socket.emit('public-rooms', { rooms: getPublicRoomList() });
+  });
+
+  socket.on('quick-play', (data) => {
+    // Alias historique: quick-play = rejoindre public, ou créer si aucune salle ouverte.
+    playerName = (data?.name || 'Joueur').slice(0, 20);
+    addSocketToPublicRoom({ createIfMissing: true, preferredRoomId: null });
   });
 
   socket.on('bid', (data) => {
@@ -152,6 +336,7 @@ io.on('connection', (socket) => {
     }
 
     broadcastGameState(currentRoom);
+    touchRoom(currentRoom);
   });
 
   socket.on('play-card', (data) => {
@@ -192,6 +377,7 @@ io.on('connection', (socket) => {
     }
 
     broadcastGameState(currentRoom);
+    touchRoom(currentRoom);
   });
 
   socket.on('next-round', () => {
@@ -203,6 +389,7 @@ io.on('connection', (socket) => {
     game.startNewRound();
     broadcastGameState(currentRoom);
     broadcastMessage(currentRoom, 'Nouvelle manche ! Phase d\'enchères.');
+    touchRoom(currentRoom);
   });
 
   socket.on('new-game', () => {
@@ -218,6 +405,7 @@ io.on('connection', (socket) => {
     game.startNewRound();
     broadcastGameState(currentRoom);
     broadcastMessage(currentRoom, 'Nouvelle partie !', 'success');
+    touchRoom(currentRoom);
   });
 
   socket.on('get-available-positions', (data) => {
@@ -252,6 +440,7 @@ io.on('connection', (socket) => {
       text,
       timestamp: Date.now()
     });
+    touchRoom(currentRoom);
   });
 
   socket.on('disconnect', () => {
@@ -277,6 +466,27 @@ io.on('connection', (socket) => {
 });
 
 const PORT = process.env.PORT || 3000;
+
+setInterval(() => {
+  const now = Date.now();
+  for (const [roomId, game] of games.entries()) {
+    if (!game.isPublic) continue;
+    if (game.state !== 'waiting') continue;
+    const lastActivity = game.lastActivityAt || game.createdAt || now;
+    if (now - lastActivity < PUBLIC_INACTIVE_MS) continue;
+
+    for (const pos of POSITIONS) {
+      const player = game.players[pos];
+      if (!player) continue;
+      io.to(player.id).emit('error-msg', { message: 'Salle publique inactive supprimée (5 min).' });
+      io.to(player.id).emit('public-room-closed', { roomId });
+    }
+
+    games.delete(roomId);
+    console.log(`Salle publique ${roomId} supprimée (inactive 5 min)`);
+  }
+}, PUBLIC_CLEANUP_INTERVAL_MS);
+
 server.listen(PORT, () => {
   console.log(`Serveur Coinche lancé sur http://localhost:${PORT}`);
 });

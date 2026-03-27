@@ -230,9 +230,9 @@ body {
 
 .lobby-container {
   text-align: center;
-  padding: 46px 40px 38px;
-  max-width: 540px;
-  width: 92%;
+  padding: clamp(26px, 4vw, 44px);
+  max-width: 940px;
+  width: min(94vw, 940px);
   border-radius: 30px;
   background:
     linear-gradient(180deg, rgba(249, 241, 217, 0.98) 0%, rgba(246, 236, 212, 0.96) 100%);
@@ -241,6 +241,8 @@ body {
     0 32px 70px rgba(0, 0, 0, 0.45),
     inset 0 1px 0 rgba(255, 255, 255, 0.6);
   backdrop-filter: blur(2px);
+  display: grid;
+  gap: 18px;
 }
 
 .brand-logo {
@@ -251,8 +253,8 @@ body {
 }
 
 .brand-logo-lobby {
-  width: min(220px, 52vw);
-  margin-bottom: 12px;
+  width: clamp(160px, 22vw, 230px);
+  margin-bottom: 8px;
 }
 
 .brand-logo-waiting {
@@ -262,32 +264,47 @@ body {
 
 .lobby-container h1 {
   font-family: 'Playfair Display', Georgia, serif;
-  font-size: clamp(2.0rem, 4.0vw, 3.0rem);
-  font-weight: 100;
-  margin-bottom: 8px;
-  letter-spacing: 0.02em;
+  font-size: clamp(2.1rem, 4.3vw, 4rem);
+  font-weight: 800;
+  line-height: 1.04;
+  margin-bottom: 4px;
+  letter-spacing: 0.015em;
   background: linear-gradient(165deg, #274855 0%, #67442f 48%, #954a2f 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
   text-shadow: none;
-  filter: drop-shadow(0 3px 10px rgba(39, 72, 85, 0.25));
+  filter: drop-shadow(0 4px 12px rgba(39, 72, 85, 0.2));
+}
+
+.lobby-title {
+  max-width: 18ch;
+  margin-inline: auto;
+  text-wrap: balance;
 }
 
 .subtitle {
-  color: #274855;
-  margin-bottom: 30px;
-  font-size: 13px;
-  letter-spacing: 2.6px;
-  text-transform: uppercase;
-  font-weight: 700;
+  color: #355867;
+  margin-bottom: 0;
+  font-size: 14px;
+  letter-spacing: 0.03em;
+  text-transform: none;
+  font-weight: 600;
+}
+
+.lobby-form {
+  display: grid;
+  gap: 16px;
+  width: 100%;
+  max-width: 860px;
+  margin: 0 auto;
 }
 
 .lobby-form input,
 .lobby-form select {
   width: 100%;
   padding: 13px 15px;
-  margin-bottom: 14px;
+  margin-bottom: 0;
   border: 1.5px solid rgba(39, 72, 85, 0.3);
   border-radius: 14px;
   background: rgba(255, 253, 248, 0.98);
@@ -309,16 +326,123 @@ body {
 }
 
 .lobby-actions {
-  display: flex;
-  gap: 16px;
-  margin-top: 20px;
+  display: grid;
+  grid-template-columns: minmax(240px, 1fr) auto minmax(240px, 1fr);
+  gap: 14px;
   align-items: stretch;
 }
 
+.public-menu {
+  padding: 16px;
+  border-radius: 18px;
+  background: linear-gradient(180deg, rgba(252, 246, 231, 0.82), rgba(246, 236, 214, 0.74));
+  border: 1px solid rgba(39, 72, 85, 0.2);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6);
+}
+
+.public-menu h3 {
+  margin-bottom: 6px;
+  font-size: 13px;
+  color: #274855;
+  text-transform: uppercase;
+  letter-spacing: 1.7px;
+  font-weight: 800;
+}
+
+.public-menu-help {
+  margin: 0 0 10px;
+  font-size: 12px;
+  color: #45626e;
+  line-height: 1.35;
+}
+
+.public-menu-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.public-menu-actions .btn {
+  width: 100%;
+}
+
+.public-rooms-panel {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(39, 72, 85, 0.18);
+}
+
+.public-rooms-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+  font-size: 13px;
+  color: #274855;
+  font-weight: 700;
+}
+
+.public-rooms-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-height: 230px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.public-rooms-list::-webkit-scrollbar {
+  width: 4px;
+}
+
+.public-rooms-list::-webkit-scrollbar-thumb {
+  background: rgba(39, 72, 85, 0.24);
+  border-radius: 2px;
+}
+
+.public-room-entry {
+  display: grid;
+  grid-template-columns: 1fr minmax(140px, 42%);
+  align-items: center;
+  gap: 10px;
+  padding: 10px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.52);
+  border: 1px solid rgba(39, 72, 85, 0.18);
+}
+
+.public-room-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  text-align: left;
+}
+
+.public-room-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: #274855;
+}
+
+.public-room-subtitle {
+  font-size: 12px;
+  color: #4c626b;
+}
+
+.public-rooms-empty {
+  font-size: 12px;
+  color: #5e6f77;
+  text-align: center;
+  padding: 10px 4px;
+}
+
 .action-group {
-  flex: 1;
+  display: grid;
+  align-content: start;
+  gap: 10px;
   background: linear-gradient(180deg, rgba(252, 246, 231, 0.98), rgba(246, 236, 214, 0.96));
-  padding: 20px 18px;
+  padding: 18px 16px;
   border-radius: var(--radius-lg);
   border: 1px solid rgba(39, 72, 85, 0.24);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.55);
@@ -332,7 +456,7 @@ body {
 }
 
 .action-group h3 {
-  margin-bottom: 14px;
+  margin-bottom: 0;
   font-size: 12px;
   color: #67442f;
   text-transform: uppercase;
@@ -343,6 +467,7 @@ body {
 .separator {
   display: flex;
   align-items: center;
+  justify-content: center;
   color: #274855;
   font-weight: 700;
   font-size: 12px;
@@ -350,7 +475,8 @@ body {
   letter-spacing: 1px;
   background: rgba(249, 241, 217, 0.78);
   border: 1px solid rgba(39, 72, 85, 0.22);
-  padding: 0 12px;
+  min-width: 52px;
+  padding: 0 10px;
   border-radius: 999px;
 }
 
@@ -358,6 +484,14 @@ body {
   width: 100%;
   border-radius: 12px;
   border: 1px solid transparent;
+}
+
+.action-group .btn {
+  margin-top: 4px;
+}
+
+.public-room-entry .btn {
+  min-height: 42px;
 }
 
 #lobby .btn-primary {
@@ -382,7 +516,7 @@ body {
 
 .error-msg {
   color: #7a2c1f;
-  margin-top: 16px;
+  margin-top: 2px;
   padding: 12px 16px;
   background: rgba(149, 74, 47, 0.16);
   border-radius: var(--radius-md);
@@ -1724,12 +1858,24 @@ body.panel-dragging * {
   }
 
   .lobby-actions {
-    flex-direction: column;
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+
+  .public-menu-actions {
+    grid-template-columns: 1fr;
+  }
+
+  .public-room-entry {
+    grid-template-columns: 1fr;
+    gap: 8px;
   }
 
   .separator {
     justify-content: center;
-    padding: 10px 0;
+    min-height: 36px;
+    width: 100%;
+    padding: 8px 0;
   }
 
   .table-layout {
@@ -1815,7 +1961,30 @@ body.panel-dragging * {
   }
 
   .lobby-container h1 {
-    font-size: 2.2em;
+    font-size: 2.35rem;
+    letter-spacing: 0.01em;
+  }
+
+  .lobby-container {
+    padding: 24px 14px 18px;
+    border-radius: 24px;
+  }
+
+  .lobby-form {
+    gap: 12px;
+  }
+
+  .action-group {
+    padding: 16px 12px;
+  }
+
+  .public-menu {
+    padding: 12px;
+  }
+
+  .public-rooms-header {
+    flex-direction: column;
+    align-items: stretch;
   }
 
   .brand-logo-lobby {
@@ -1901,6 +2070,7 @@ body.panel-dragging * {
    ============================================================ */
 
 @media (max-width: 600px) {
+
   /* Phone top HUD background */
   #mobile-top-panel {
     display: block;
@@ -2075,7 +2245,7 @@ body.panel-dragging * {
     pointer-events: none;
   }
 
-  #chat-panel > * {
+  #chat-panel>* {
     position: relative;
     z-index: 1;
   }
@@ -2110,6 +2280,7 @@ body.panel-dragging * {
    ============================================================ */
 
 @media (max-width: 600px) and (orientation: portrait) {
+
   /* Do not display other players' hands (card backs). */
   #hand-nord,
   #hand-est,
@@ -2179,6 +2350,7 @@ body.panel-dragging * {
    ============================================================ */
 
 @media (max-width: 600px) and (prefers-color-scheme: dark) {
+
   /* Opt into dark color-scheme only for the lobby (the game stays in light scheme). */
   #lobby {
     color-scheme: dark;
@@ -2272,6 +2444,7 @@ body.panel-dragging * {
 }
 
 @media (forced-colors: active) {
+
   #game-table,
   #game-table * {
     forced-color-adjust: none;
