@@ -933,6 +933,10 @@ document.getElementById('btn-create').addEventListener('click', () => {
 const addBotBtn = document.getElementById('btn-add-bot');
 if (addBotBtn) {
   addBotBtn.addEventListener('click', () => {
+    const ok = window.confirm(
+      'Ajouter une IA ?\n\n⚠️ Attention : les IA sont encore médiocres et il est déconseillé de les utiliser pour l\'instant.'
+    );
+    if (!ok) return;
     socket.emit('add-bot', { name: 'IA' });
   });
 }
