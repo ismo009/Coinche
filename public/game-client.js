@@ -1248,7 +1248,9 @@ function getBidLogoUrlForSuit(suit) {
     coeur: 'COEUR.png',
     carreau: 'CARREAU.png',
     trefle: 'TREFLE.png',
-    pique: 'PIC.png'
+    pique: 'PIC.png',
+    'tout-atout': 'TA.png',
+    'sans-atout': 'SA.png'
   };
   const file = suitMap[suit];
   if (!file) return null;
