@@ -8,6 +8,7 @@ const socket = io();
 let myPosition = null;
 let myRoom = null;
 let gameState = null;
+let isRoomOwner = false;
 
 // Trick collect animation (UX): wait 0.2s then slide cards to trick winner.
 const TRICK_COLLECT_DELAY_MS = 200;
@@ -929,6 +930,17 @@ document.getElementById('btn-create').addEventListener('click', () => {
   socket.emit('create-room', { name, position });
 });
 
+const addBotBtn = document.getElementById('btn-add-bot');
+if (addBotBtn) {
+  addBotBtn.addEventListener('click', () => {
+    const ok = window.confirm(
+      'Ajouter une IA ?\n\n⚠️ Attention : les IA sont encore médiocres et il est déconseillé de les utiliser pour l\'instant.'
+    );
+    if (!ok) return;
+    socket.emit('add-bot', { name: 'IA' });
+  });
+}
+
 document.getElementById('btn-join').addEventListener('click', () => {
   const name = document.getElementById('player-name').value.trim() || 'Joueur';
   const roomId = document.getElementById('room-code').value.trim();
@@ -1123,6 +1135,7 @@ function ensurePrivateLobbyCodeFirstChatMessage(data) {
 socket.on('room-created', (data) => {
   myRoom = data.roomId;
   myPosition = data.position;
+  isRoomOwner = true;
   updateWaitingRoomRoomInfo(data);
   clearChat();
   ensurePrivateLobbyCodeFirstChatMessage(data);
@@ -1132,6 +1145,7 @@ socket.on('room-created', (data) => {
 socket.on('room-joined', (data) => {
   myRoom = data.roomId;
   myPosition = data.position;
+  isRoomOwner = false;
   updateWaitingRoomRoomInfo(data);
   clearChat();
   ensurePrivateLobbyCodeFirstChatMessage(data);
@@ -1227,6 +1241,13 @@ function updateDisplay() {
 
 function updateWaitingRoom() {
   const posNames = { sud: 'Sud', nord: 'Nord', est: 'Est', ouest: 'Ouest' };
+
+  const addBotBtn = document.getElementById('btn-add-bot');
+  if (addBotBtn) {
+    const canAddBot = isRoomOwner && gameState?.state === 'waiting';
+    addBotBtn.classList.toggle('hidden', !canAddBot);
+  }
+
   for (const pos of ['sud', 'nord', 'est', 'ouest']) {
     const slot = document.getElementById(`slot-${pos}`);
     const nameEl = slot.querySelector('.slot-name');
