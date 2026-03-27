@@ -404,6 +404,10 @@ class CoincheGame {
     this.lastTrickWinner = null;
     this.roundHistory = [];
     this.roundNumber = 0;
+
+    // Historique détaillé des cartes jouées (utile pour IA serveur)
+    // Chaque entrée: { roundNumber, trickNumber, indexInTrick, player, card, contractSuit }
+    this.playHistory = [];
   }
 
   addPlayer(playerId, playerName, position) {
@@ -452,6 +456,9 @@ class CoincheGame {
     this.belotePlayers = {};
     this.lastTrick = null;
     this.lastTrickWinner = null;
+
+    // On démarre un nouvel historique de manche
+    this.playHistory = [];
 
     // Le joueur après le donneur commence les enchères
     this.currentPlayer = getNextPlayer(this.dealer);
@@ -598,6 +605,16 @@ class CoincheGame {
     // Retirer la carte de la main
     hand.splice(cardIndex, 1);
     this.currentTrick.push({ player: playerPosition, card });
+
+    // Historiser la carte jouée (avant éventuelle résolution du pli)
+    this.playHistory.push({
+      roundNumber: this.roundNumber + 1,
+      trickNumber: this.trickNumber,
+      indexInTrick: this.currentTrick.length - 1,
+      player: playerPosition,
+      card: { ...card },
+      contractSuit: this.contract?.suit || null
+    });
 
     // Vérifier belote/rebelote (supporte plusieurs belotes en tout-atout)
     let beloteAnnounce = null;
@@ -828,6 +845,10 @@ class CoincheGame {
       cardsLeft: {},
       beloteAnnounced: this.beloteAnnounced
     };
+
+    // Expose un historique compact pour IA / debug côté client si besoin.
+    // (le client actuel ne l'utilise pas)
+    state.playHistory = this.playHistory;
 
     // Infos joueurs
     for (const pos of POSITIONS) {
