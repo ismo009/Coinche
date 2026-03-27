@@ -464,6 +464,15 @@ body {
   border-radius: 2px;
 }
 
+.lobby-made-by {
+  margin-top: 4px;
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  color: rgba(39, 72, 85, 0.82);
+  font-weight: 600;
+  text-align: center;
+}
+
 .public-room-entry {
   display: grid;
   grid-template-columns: 1fr minmax(140px, 42%);

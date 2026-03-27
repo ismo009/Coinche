@@ -936,7 +936,7 @@ if (addBotBtn) {
   addBotBtn.addEventListener('click', () => {
     if (!addBotWarningShown) {
       const ok = window.confirm(
-        'Ajouter une IA ?\n\n⚠️ Attention : les IA sont encore médiocres et il est déconseillé de les utiliser pour l\'instant.'
+        'Ajouter une IA ?\n\n⚠️ Attention : les IA sont encore en béta, elles ont un niveau acceptable, mais restent peu ouf en Sans Atouts/Tout Atouts.'
       );
       if (!ok) return;
       addBotWarningShown = true;
