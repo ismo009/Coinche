@@ -9,6 +9,7 @@ let myPosition = null;
 let myRoom = null;
 let gameState = null;
 let isRoomOwner = false;
+let addBotWarningShown = false;
 
 // Trick collect animation (UX): wait 0.2s then slide cards to trick winner.
 const TRICK_COLLECT_DELAY_MS = 200;
@@ -933,10 +934,13 @@ document.getElementById('btn-create').addEventListener('click', () => {
 const addBotBtn = document.getElementById('btn-add-bot');
 if (addBotBtn) {
   addBotBtn.addEventListener('click', () => {
-    const ok = window.confirm(
-      'Ajouter une IA ?\n\n⚠️ Attention : les IA sont encore médiocres et il est déconseillé de les utiliser pour l\'instant.'
-    );
-    if (!ok) return;
+    if (!addBotWarningShown) {
+      const ok = window.confirm(
+        'Ajouter une IA ?\n\n⚠️ Attention : les IA sont encore médiocres et il est déconseillé de les utiliser pour l\'instant.'
+      );
+      if (!ok) return;
+      addBotWarningShown = true;
+    }
     socket.emit('add-bot', { name: 'IA' });
   });
 }
