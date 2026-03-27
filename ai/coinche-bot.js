@@ -353,6 +353,122 @@ function bestBidFromHand(hand) {
   return candidates[0];
 }
 
+function estimateDefensePotentialPoints(hand, contractSuit) {
+  if (!Array.isArray(hand) || hand.length === 0 || !contractSuit) return 0;
+
+  let score = 0;
+
+  if (contractSuit === 'sans-atout') {
+    const aces = hand.filter(c => c.rank === 'as').length;
+    const tens = hand.filter(c => c.rank === '10').length;
+    const kings = hand.filter(c => c.rank === 'roi').length;
+    const queens = hand.filter(c => c.rank === 'dame').length;
+
+    score += aces * 18;
+    score += tens * 9;
+    score += kings * 2 + queens;
+
+    for (const s of SUITS) {
+      const suitCards = hand.filter(c => c.suit === s);
+      if (suitCards.length >= 4) score += 3;
+      if (suitCards.some(c => c.rank === 'as') && suitCards.some(c => c.rank === '10')) score += 5;
+    }
+    return score;
+  }
+
+  if (contractSuit === 'tout-atout') {
+    const jacks = hand.filter(c => c.rank === 'valet').length;
+    const nines = hand.filter(c => c.rank === '9').length;
+    const aces = hand.filter(c => c.rank === 'as').length;
+    const tens = hand.filter(c => c.rank === '10').length;
+
+    score += jacks * 13;
+    score += nines * 10;
+    score += aces * 6;
+    score += tens * 4;
+
+    // Extra control if we own multiple top trumps across suits.
+    if (jacks + nines >= 3) score += 8;
+    return score;
+  }
+
+  // Suit contract defense.
+  const trumpCards = hand.filter(c => c.suit === contractSuit);
+  const hasJ = trumpCards.some(c => c.rank === 'valet');
+  const has9 = trumpCards.some(c => c.rank === '9');
+  const hasA = trumpCards.some(c => c.rank === 'as');
+  const has10 = trumpCards.some(c => c.rank === '10');
+
+  score += trumpCards.length * 4;
+  if (hasJ) score += 18;
+  if (has9) score += 12;
+  if (hasA) score += 6;
+  if (has10) score += 4;
+
+  const sideAces = hand.filter(c => c.suit !== contractSuit && c.rank === 'as').length;
+  const sideTens = hand.filter(c => c.suit !== contractSuit && c.rank === '10').length;
+  score += sideAces * 10 + sideTens * 4;
+
+  return score;
+}
+
+function estimateOpponentBeloteRiskPenalty(hand, contractSuit, bidPoints) {
+  // Only relevant on a suit-trump contract.
+  if (!SUITS.includes(contractSuit)) return 0;
+
+  const hasTrumpKing = hand.some(c => c.suit === contractSuit && c.rank === 'roi');
+  const hasTrumpQueen = hand.some(c => c.suit === contractSuit && c.rank === 'dame');
+
+  // If we hold either king or queen of trump, opponents cannot have belote.
+  if (hasTrumpKing || hasTrumpQueen) return 0;
+
+  // Both K/Q are in unknown cards (24 cards at bidding start from our POV).
+  // Opponents combined hold 16 cards. Baseline:
+  // P(K&Q both in opponents) = C(16,2)/C(24,2) ~= 0.435
+  const baseProbBeloteOpp = 120 / 276;
+
+  // If opponents bid high, increase prior that bidder side has structure incl. belote.
+  const bidBoost = Math.max(0, bidPoints - 80) * 0.0025;
+  const probBeloteOpp = Math.min(0.75, baseProbBeloteOpp + bidBoost);
+
+  // Expected penalty: belote points + slight control bonus from holding KQ at trump.
+  return probBeloteOpp * 24;
+}
+
+function shouldCoincheOpponent(game, hand) {
+  const topBid = getHighestBidEntry(game?.bids);
+  if (!topBid || topBid.type !== 'bid') return false;
+  if (!topBid.player) return false;
+
+  // Only coinche opponent contracts, and only once.
+  const myTeam = typeof getTeam === 'function' ? getTeam(game.currentPlayer) : null;
+  const bidTeam = typeof getTeam === 'function' ? getTeam(topBid.player) : null;
+  if (!myTeam || !bidTeam || myTeam === bidTeam) return false;
+  if (Array.isArray(game.bids) && game.bids.some(b => b && b.type === 'coinche')) return false;
+
+  // Keep special contracts out of this heuristic for now.
+  if (topBid.points >= 250) return false;
+
+  // To set contract: defense must make strictly more than (162 - bid).
+  const requiredDefenseToSet = 163 - topBid.points;
+  const rawDefensePotential = estimateDefensePotentialPoints(hand, topBid.suit);
+  const beloteRiskPenalty = estimateOpponentBeloteRiskPenalty(hand, topBid.suit, topBid.points);
+
+  // High bids imply stronger enemy hands: discount our raw estimate as game-theory prior.
+  const enemyStrengthPenalty = Math.max(0, topBid.points - 80) * 0.32;
+  const effectiveDefensePotential = rawDefensePotential - enemyStrengthPenalty - beloteRiskPenalty;
+  const margin = effectiveDefensePotential - requiredDefenseToSet;
+
+  // Be much more conservative at 80, gradually less conservative on higher bids.
+  let requiredMargin = 8;
+  if (topBid.points <= 90) requiredMargin = 14;
+  else if (topBid.points <= 110) requiredMargin = 11;
+  else if (topBid.points <= 130) requiredMargin = 8;
+  else requiredMargin = 6;
+
+  return margin >= requiredMargin;
+}
+
 function getLastBidEntry(bids) {
   if (!Array.isArray(bids) || bids.length === 0) return null;
   for (let i = bids.length - 1; i >= 0; i--) {
@@ -389,22 +505,39 @@ function shouldAllowPartnerRaise(game) {
   if (!partnerPos) return false;
   if (topBid.player !== partnerPos) return false;
 
-  // Prevent “re-remonter”: if we already bid this same suit after partner's bid, do not raise again.
-  // This covers: partner bids ♦, bot raises ♦, partner bids ♦ again (not possible in standard bidding), etc.
-  for (let i = (game.bids?.length || 0) - 1; i >= 0; i--) {
-    const b = game.bids[i];
-    if (!b) continue;
-    if (b.type !== 'bid') continue;
-    if (b.player === partnerPos && b.suit === topBid.suit) {
-      // We reached partner's bid in history; if we didn't find our own same-suit bid after it, allow.
-      return true;
-    }
+  const bids = Array.isArray(game?.bids) ? game.bids : [];
+  const topBidIndex = bids.lastIndexOf(topBid);
+  if (topBidIndex < 0) return false;
+
+  // Find our previous same-suit bid before partner's current top bid.
+  let myPrevSuitBidIndex = -1;
+  for (let i = topBidIndex - 1; i >= 0; i--) {
+    const b = bids[i];
+    if (!b || b.type !== 'bid') continue;
     if (b.player === game.currentPlayer && b.suit === topBid.suit) {
-      return false;
+      myPrevSuitBidIndex = i;
+      break;
     }
   }
 
-  return true;
+  // If we have never announced this suit before, this is a first support, always allowed.
+  if (myPrevSuitBidIndex === -1) return true;
+
+  // Double raise is prohibited unless an opponent bid intervened between
+  // our previous same-suit bid and partner's current same-suit bid.
+  const myTeam = typeof getTeam === 'function' ? getTeam(game.currentPlayer) : null;
+  let opponentIntervened = false;
+  for (let i = myPrevSuitBidIndex + 1; i < topBidIndex; i++) {
+    const b = bids[i];
+    if (!b || b.type !== 'bid') continue;
+    const team = typeof getTeam === 'function' ? getTeam(b.player) : null;
+    if (myTeam && team && team !== myTeam) {
+      opponentIntervened = true;
+      break;
+    }
+  }
+
+  return opponentIntervened;
 }
 
 function computePartnerRaiseIncrement(hand, partnerSuit, partnerPoints) {
@@ -422,7 +555,6 @@ function computePartnerRaiseIncrement(hand, partnerSuit, partnerPoints) {
 
   let inc = 0;
   if (partnerPoints < 100) {
-    inc += 20;
     if (hasJ) inc += 20;
     if (has9) inc += 10;
   } else if (partnerPoints >= 100 && partnerPoints <= 120) {
@@ -430,8 +562,9 @@ function computePartnerRaiseIncrement(hand, partnerSuit, partnerPoints) {
     if (has9) inc += 10;
     inc += aceCount * 10;
   } else {
-    // Not specified; keep conservative: no raise.
-    inc += 0;
+    if (hasJ) inc += 20;
+    if (has9) inc += 10;
+    inc += aceCount * 10;
   }
 
   if (belote) inc += 20;
@@ -443,6 +576,10 @@ function chooseBid(game) {
   const topBid = getHighestBidEntry(game.bids);
   const myTeam = typeof getTeam === 'function' ? getTeam(game.currentPlayer) : null;
   const topBidTeam = topBid?.player && typeof getTeam === 'function' ? getTeam(topBid.player) : null;
+
+  if (shouldCoincheOpponent(game, hand)) {
+    return { type: 'coinche' };
+  }
 
   // IA-only: allow a single “remonter” of partner's suit bid (non TA/SA) based on our hand.
   if (shouldAllowPartnerRaise(game)) {
@@ -496,6 +633,10 @@ function chooseCard(game, position) {
   if (playable.length === 1) return playable[0];
 
   const myTeam = stateForBot.myTeam;
+  const contractTeam = game.contract?.team;
+  const iAmAttack = !!contractTeam && contractTeam === myTeam;
+  const iAmDefense = !!contractTeam && contractTeam !== myTeam;
+  const partnerPos = typeof getPartner === 'function' ? getPartner(position) : null;
   const history = Array.isArray(stateForBot.playHistory) ? stateForBot.playHistory : [];
   const alreadyPlayed = history.map(h => h.card).filter(Boolean);
 
@@ -519,12 +660,133 @@ function chooseCard(game, position) {
     ? Math.max(0, 8 - (trumpsAlreadyPlayed + myTrumpCount))
     : 0;
 
+  const cardsLeft = stateForBot.cardsLeft || {};
+
+  function inferPlayersWithoutTrump() {
+    const noTrump = {};
+    if (!isSuitTrumpContract) return noTrump;
+
+    const byTrick = new Map();
+    for (const h of history) {
+      if (!h || !h.card) continue;
+      const key = `${h.roundNumber || 0}:${h.trickNumber || 0}`;
+      if (!byTrick.has(key)) byTrick.set(key, []);
+      byTrick.get(key).push(h);
+    }
+
+    for (const entries of byTrick.values()) {
+      entries.sort((a, b) => (a.indexInTrick || 0) - (b.indexInTrick || 0));
+      if (!entries.length) continue;
+      const ledSuit = entries[0].card.suit;
+      if (ledSuit !== trumpSuit) continue;
+
+      for (const play of entries) {
+        if (play.card.suit !== trumpSuit) {
+          noTrump[play.player] = true;
+        }
+      }
+    }
+
+    return noTrump;
+  }
+
+  const knownNoTrump = inferPlayersWithoutTrump();
+  const opponents = Object.keys(cardsLeft).filter(p => p !== position && typeof getTeam === 'function' && getTeam(p) !== myTeam);
+
+  function estimateEnemyTrumpCount() {
+    if (!isSuitTrumpContract) return 0;
+    if (unknownTrumpsOutsideMyHand <= 0) return 0;
+
+    const candidateHolders = Object.keys(cardsLeft).filter(p =>
+      p !== position &&
+      (cardsLeft[p] || 0) > 0 &&
+      !knownNoTrump[p]
+    );
+
+    const enemyHolders = opponents.filter(p =>
+      (cardsLeft[p] || 0) > 0 &&
+      !knownNoTrump[p]
+    );
+
+    if (enemyHolders.length === 0) return 0;
+    const totalCapacity = candidateHolders.reduce((sum, p) => sum + (cardsLeft[p] || 0), 0);
+    if (totalCapacity <= 0) return 0;
+
+    let estimate = 0;
+    for (const p of enemyHolders) {
+      estimate += unknownTrumpsOutsideMyHand * ((cardsLeft[p] || 0) / totalCapacity);
+    }
+    return Math.max(0, Math.round(estimate));
+  }
+
+  const estimatedEnemyTrumpsRemaining = estimateEnemyTrumpCount();
+  const opponentsDefinitelyOutOfTrump = isSuitTrumpContract && opponents.length > 0
+    ? opponents.every(p => knownNoTrump[p] || (cardsLeft[p] || 0) === 0)
+    : false;
+
+  function getOrderForCardInContract(card) {
+    if (!card) return [];
+    if (trumpSuit === 'tout-atout') return ALL_TRUMP_ORDER;
+    if (trumpSuit === 'sans-atout') return NO_TRUMP_ORDER;
+    if (isSuitTrumpContract && card.suit === trumpSuit) return TRUMP_ORDER;
+    return PLAIN_ORDER;
+  }
+
+  function countUnseenStrongerCards(card) {
+    if (!card) return 0;
+    const order = getOrderForCardInContract(card);
+    const idx = order.indexOf(card.rank);
+    if (idx < 0) return 0;
+
+    let unseen = 0;
+    const strongerRanks = order.slice(idx + 1);
+    for (const rank of strongerRanks) {
+      const already = alreadyPlayed.some(c => c.suit === card.suit && c.rank === rank);
+      if (already) continue;
+      const inMyHand = hand.some(c => c.suit === card.suit && c.rank === rank);
+      if (!inMyHand) unseen++;
+    }
+    return unseen;
+  }
+
+  function hasPotentiallyStrongerEnemyTrump(card) {
+    if (!isSuitTrumpContract || !card || card.suit !== trumpSuit) return false;
+    const idx = TRUMP_ORDER.indexOf(card.rank);
+    if (idx < 0) return false;
+
+    const strongerRanks = TRUMP_ORDER.slice(idx + 1);
+    for (const rank of strongerRanks) {
+      const already = alreadyPlayed.some(c => c.suit === trumpSuit && c.rank === rank);
+      if (already) continue;
+      const inMyHand = hand.some(c => c.suit === trumpSuit && c.rank === rank);
+      if (!inMyHand) return true;
+    }
+    return false;
+  }
+
   const shouldPullTrumpsNow =
     isSuitTrumpContract &&
     isLeadingNewTrick &&
     teamJustWonPreviousTrick &&
+    iAmAttack &&
     myTrumpCount > 0 &&
-    unknownTrumpsOutsideMyHand > 0;
+    unknownTrumpsOutsideMyHand > 0 &&
+    !opponentsDefinitelyOutOfTrump &&
+    estimatedEnemyTrumpsRemaining > 0;
+
+  const shouldForceTrumpLeadAtFirstTrick =
+    isSuitTrumpContract &&
+    isLeadingNewTrick &&
+    iAmAttack &&
+    game.trickNumber === 1 &&
+    myTrumpCount > 0 &&
+    unknownTrumpsOutsideMyHand > 0 &&
+    !opponentsDefinitelyOutOfTrump;
+
+  const shouldAvoidDefenseTrumpLead =
+    isSuitTrumpContract &&
+    isLeadingNewTrick &&
+    iAmDefense;
 
   const fullDeck = buildDeck();
   const knownCards = [...hand, ...alreadyPlayed];
@@ -540,7 +802,6 @@ function chooseCard(game, position) {
     remainingPlayers.push(cursor);
   }
 
-  const cardsLeft = stateForBot.cardsLeft || {};
   const knownOtherHands = {};
   for (const p of remainingPlayers) {
     const n = cardsLeft[p] || 0;
@@ -597,6 +858,113 @@ function chooseCard(game, position) {
 
   function evaluateCandidate(card) {
     let total = 0;
+    const currentTrickBeforePlay = Array.isArray(game.currentTrick) ? game.currentTrick : [];
+    const ledSuitNow = currentTrickBeforePlay.length > 0 ? currentTrickBeforePlay[0].card.suit : null;
+    const winnerBeforePlay = currentTrickBeforePlay.length > 0
+      ? determineCurrentWinnerEntry(currentTrickBeforePlay, trumpSuit)
+      : null;
+
+    // Conservation reflex:
+    // If partner is already master of the current trick, strongly avoid dumping
+    // a likely master off-trump ace on another suit.
+    const isOffTrumpAce = isSuitTrumpContract && card.rank === 'as' && card.suit !== trumpSuit;
+    const discardingOnDifferentSuit = !!ledSuitNow && card.suit !== ledSuitNow;
+    const partnerCurrentlyMaster = !!winnerBeforePlay && !!partnerPos && winnerBeforePlay.winner.player === partnerPos;
+    const asAlreadyPlayedInSuit = alreadyPlayed.some(c => c.suit === card.suit && c.rank === 'as');
+    const tenAlreadyPlayedInSuit = alreadyPlayed.some(c => c.suit === card.suit && c.rank === '10');
+    const likelyMasterAce = isOffTrumpAce && !asAlreadyPlayedInSuit;
+    const isOffTrumpSecondTen =
+      isSuitTrumpContract &&
+      card.rank === '10' &&
+      card.suit !== trumpSuit &&
+      asAlreadyPlayedInSuit &&
+      !tenAlreadyPlayedInSuit;
+
+    const conservationPenalty = partnerCurrentlyMaster && discardingOnDifferentSuit && likelyMasterAce
+      ? 18
+      : 0;
+
+    let secondTenConservationPenalty = 0;
+    if (partnerCurrentlyMaster && discardingOnDifferentSuit && isOffTrumpSecondTen) {
+      // Stronger conservation when enemy trumps are low, because cashing the 10 later is more realistic.
+      if (estimatedEnemyTrumpsRemaining <= 1) secondTenConservationPenalty = 14;
+      else if (estimatedEnemyTrumpsRemaining <= 3) secondTenConservationPenalty = 11;
+      else if (estimatedEnemyTrumpsRemaining <= 5) secondTenConservationPenalty = 8;
+      else secondTenConservationPenalty = 5;
+    }
+
+    // Master conservation in TA/SA (and also valid in suit contracts):
+    // if partner already wins the trick, avoid spending current or second masters
+    // when a lower legal card exists.
+    let masterConservationPenalty = 0;
+    const lowerLegalAlternative = playable.some(c =>
+      c.suit === card.suit &&
+      getOrderForCardInContract(c).indexOf(c.rank) < getOrderForCardInContract(card).indexOf(card.rank)
+    );
+    const unseenStronger = countUnseenStrongerCards(card);
+    const isCurrentMaster = unseenStronger === 0;
+    const isSecondMaster = unseenStronger === 1;
+
+    if (partnerCurrentlyMaster && lowerLegalAlternative) {
+      if (trumpSuit === 'tout-atout') {
+        if (isCurrentMaster) masterConservationPenalty = 18;
+        else if (isSecondMaster) masterConservationPenalty = 16;
+      }
+
+      if (trumpSuit === 'sans-atout') {
+        if (isCurrentMaster) masterConservationPenalty = 17;
+        else if (isSecondMaster) masterConservationPenalty = 14;
+      }
+    }
+
+    // Preserve "second master" trumps when possible.
+    // Example: with 8 + 9 at trump and jack still out, prefer 8 first to keep 9 for later.
+    let secondMasterTrumpConservationPenalty = 0;
+    if (isSuitTrumpContract && card.suit === trumpSuit) {
+      const lowerTrumpPlayable = playable.some(c =>
+        c.suit === trumpSuit && TRUMP_ORDER.indexOf(c.rank) < TRUMP_ORDER.indexOf(card.rank)
+      );
+
+      const partnerCurrentlyMaster = !!winnerBeforePlay && !!partnerPos && winnerBeforePlay.winner.player === partnerPos;
+      const dangerousToCashNow = hasPotentiallyStrongerEnemyTrump(card);
+
+      if (lowerTrumpPlayable && dangerousToCashNow) {
+        if (partnerCurrentlyMaster) {
+          secondMasterTrumpConservationPenalty = 14;
+        } else if (isLeadingNewTrick) {
+          secondMasterTrumpConservationPenalty = 10;
+        } else {
+          secondMasterTrumpConservationPenalty = 6;
+        }
+
+        // If enemy trumps are still many, the card is even more exposed.
+        if (estimatedEnemyTrumpsRemaining >= 3) {
+          secondMasterTrumpConservationPenalty += 2;
+        }
+      }
+    }
+
+    let defenseTrumpConservationPenalty = 0;
+    if (isSuitTrumpContract && iAmDefense && card.suit === trumpSuit) {
+      if (isLeadingNewTrick) {
+        defenseTrumpConservationPenalty += (card.rank === 'valet' ? 24 : 15);
+      }
+      if (partnerCurrentlyMaster) {
+        defenseTrumpConservationPenalty += 8;
+      }
+    }
+
+    let firstTrickTrumpPressure = 0;
+    if (isSuitTrumpContract && iAmAttack && isLeadingNewTrick && game.trickNumber === 1) {
+      if (card.suit === trumpSuit) {
+        // Strong incentive to start pulling enemy trumps immediately.
+        // Keep a small preference for cheaper trumps over burning masters.
+        firstTrickTrumpPressure += 20 - (getDiscardRisk(card, trumpSuit) * 0.15);
+      } else {
+        // Discourage cashing side aces/10 before trumps are drawn.
+        firstTrickTrumpPressure -= 14;
+      }
+    }
 
     for (let s = 0; s < sampleCount; s++) {
       const sampledHands = sampleHandsForRemainingPlayers();
@@ -635,6 +1003,12 @@ function chooseCard(game, position) {
 
       const discardPenalty = winnerTeam === myTeam ? 0.05 : 0.45;
       utility -= getDiscardRisk(card, trumpSuit) * discardPenalty;
+      utility -= conservationPenalty;
+      utility -= secondTenConservationPenalty;
+      utility -= masterConservationPenalty;
+      utility -= secondMasterTrumpConservationPenalty;
+      utility -= defenseTrumpConservationPenalty;
+      utility += firstTrickTrumpPressure;
 
       total += utility;
     }
@@ -642,9 +1016,13 @@ function chooseCard(game, position) {
     return total / sampleCount;
   }
 
-  const candidateCards = shouldPullTrumpsNow
+  const candidateCards = shouldForceTrumpLeadAtFirstTrick
     ? playable.filter(c => c.suit === trumpSuit)
-    : playable;
+    : shouldPullTrumpsNow
+      ? playable.filter(c => c.suit === trumpSuit)
+      : shouldAvoidDefenseTrumpLead
+        ? playable.filter(c => c.suit !== trumpSuit)
+        : playable;
 
   const cardsToEvaluate = candidateCards.length > 0 ? candidateCards : playable;
 
