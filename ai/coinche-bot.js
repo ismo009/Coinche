@@ -1,7 +1,211 @@
 // Simple server-side bot logic for Coinche.
 // Focus: keep decision logic isolated and easy to tweak.
 
-const { SUITS } = require('../game');
+const { SUITS, getPartner, getNextPlayer, getTeam } = require('../game');
+
+const RANKS = ['7', '8', '9', '10', 'valet', 'dame', 'roi', 'as'];
+
+const TRUMP_VALUES = {
+  valet: 20, '9': 14, as: 11, '10': 10, roi: 4, dame: 3, '8': 0, '7': 0
+};
+
+const PLAIN_VALUES = {
+  as: 11, '10': 10, roi: 4, dame: 3, valet: 2, '9': 0, '8': 0, '7': 0
+};
+
+const ALL_TRUMP_VALUES = {
+  valet: 14, '9': 9, as: 6, '10': 5, roi: 3, dame: 1, '8': 0, '7': 0
+};
+
+const NO_TRUMP_VALUES = {
+  as: 19, '10': 10, roi: 4, dame: 3, valet: 2, '9': 0, '8': 0, '7': 0
+};
+
+const TRUMP_ORDER = ['7', '8', 'dame', 'roi', '10', 'as', '9', 'valet'];
+const PLAIN_ORDER = ['7', '8', '9', 'valet', 'dame', 'roi', '10', 'as'];
+const ALL_TRUMP_ORDER = ['7', '8', 'dame', 'roi', '10', 'as', '9', 'valet'];
+const NO_TRUMP_ORDER = ['7', '8', '9', 'valet', 'dame', 'roi', '10', 'as'];
+
+function buildDeck() {
+  const deck = [];
+  for (const suit of SUITS) {
+    for (const rank of RANKS) {
+      deck.push({ suit, rank });
+    }
+  }
+  return deck;
+}
+
+function cardKey(card) {
+  return `${card.suit}:${card.rank}`;
+}
+
+function cardEquals(a, b) {
+  return !!a && !!b && a.suit === b.suit && a.rank === b.rank;
+}
+
+function removeCardsFromDeck(deck, cards) {
+  const remaining = [...deck];
+  for (const c of cards) {
+    const idx = remaining.findIndex(d => cardEquals(d, c));
+    if (idx >= 0) remaining.splice(idx, 1);
+  }
+  return remaining;
+}
+
+function getCardValueForContract(card, trumpSuit) {
+  if (trumpSuit === 'tout-atout') return ALL_TRUMP_VALUES[card.rank] || 0;
+  if (trumpSuit === 'sans-atout') return NO_TRUMP_VALUES[card.rank] || 0;
+  if (card.suit === trumpSuit) return TRUMP_VALUES[card.rank] || 0;
+  return PLAIN_VALUES[card.rank] || 0;
+}
+
+function getCardStrengthForTrick(card, trumpSuit, ledSuit) {
+  let order;
+  if (trumpSuit === 'tout-atout') {
+    order = ALL_TRUMP_ORDER;
+  } else if (trumpSuit === 'sans-atout') {
+    order = NO_TRUMP_ORDER;
+  } else if (card.suit === trumpSuit) {
+    return 100 + TRUMP_ORDER.indexOf(card.rank);
+  } else {
+    order = PLAIN_ORDER;
+  }
+
+  if (card.suit === ledSuit) return order.indexOf(card.rank);
+  return -1;
+}
+
+function determineCurrentWinnerEntry(trick, trumpSuit) {
+  if (!trick || trick.length === 0) return null;
+  const ledSuit = trick[0].card.suit;
+  let winner = trick[0];
+  let best = getCardStrengthForTrick(winner.card, trumpSuit, ledSuit);
+  for (let i = 1; i < trick.length; i++) {
+    const s = getCardStrengthForTrick(trick[i].card, trumpSuit, ledSuit);
+    if (s > best) {
+      best = s;
+      winner = trick[i];
+    }
+  }
+  return { winner, strength: best, ledSuit };
+}
+
+function getHighestTrumpInTrick(trick, trumpSuit) {
+  let highest = null;
+  for (const play of trick) {
+    if (play.card.suit === trumpSuit) {
+      if (!highest || TRUMP_ORDER.indexOf(play.card.rank) > TRUMP_ORDER.indexOf(highest)) {
+        highest = play.card.rank;
+      }
+    }
+  }
+  return highest;
+}
+
+function getHighestTrumpInTrickAllTrump(trick, suit) {
+  let highest = null;
+  for (const play of trick) {
+    if (play.card.suit === suit) {
+      if (!highest || ALL_TRUMP_ORDER.indexOf(play.card.rank) > ALL_TRUMP_ORDER.indexOf(highest)) {
+        highest = play.card.rank;
+      }
+    }
+  }
+  return highest;
+}
+
+function getPlayableCardsForSimulation(hand, trick, trumpSuit, playerPosition) {
+  if (!Array.isArray(hand) || hand.length === 0) return [];
+  if (!Array.isArray(trick) || trick.length === 0) return hand;
+
+  const ledSuit = trick[0].card.suit;
+  const cardsOfLedSuit = hand.filter(c => c.suit === ledSuit);
+
+  if (trumpSuit === 'sans-atout') {
+    return cardsOfLedSuit.length > 0 ? cardsOfLedSuit : hand;
+  }
+
+  if (trumpSuit === 'tout-atout') {
+    if (cardsOfLedSuit.length > 0) {
+      const highestPlayed = getHighestTrumpInTrickAllTrump(trick, ledSuit);
+      const higherCards = cardsOfLedSuit.filter(c =>
+        ALL_TRUMP_ORDER.indexOf(c.rank) > ALL_TRUMP_ORDER.indexOf(highestPlayed)
+      );
+      return higherCards.length > 0 ? higherCards : cardsOfLedSuit;
+    }
+    return hand;
+  }
+
+  if (ledSuit === trumpSuit) {
+    if (cardsOfLedSuit.length > 0) {
+      const highestPlayed = getHighestTrumpInTrick(trick, trumpSuit);
+      const higherCards = cardsOfLedSuit.filter(c =>
+        TRUMP_ORDER.indexOf(c.rank) > TRUMP_ORDER.indexOf(highestPlayed)
+      );
+      return higherCards.length > 0 ? higherCards : cardsOfLedSuit;
+    }
+    return hand;
+  }
+
+  if (cardsOfLedSuit.length > 0) return cardsOfLedSuit;
+
+  const trumpCards = hand.filter(c => c.suit === trumpSuit);
+  if (trumpCards.length > 0) {
+    const currentWinner = determineCurrentWinnerEntry(trick, trumpSuit);
+    const partnerPos = typeof getPartner === 'function' ? getPartner(playerPosition) : null;
+    if (currentWinner && partnerPos && currentWinner.winner.player === partnerPos) {
+      return hand;
+    }
+
+    const highestTrumpPlayed = getHighestTrumpInTrick(trick, trumpSuit);
+    if (highestTrumpPlayed) {
+      const higherTrumps = trumpCards.filter(c =>
+        TRUMP_ORDER.indexOf(c.rank) > TRUMP_ORDER.indexOf(highestTrumpPlayed)
+      );
+      return higherTrumps.length > 0 ? higherTrumps : trumpCards;
+    }
+    return trumpCards;
+  }
+
+  return hand;
+}
+
+function drawRandomCards(pool, n) {
+  const picked = [];
+  for (let i = 0; i < n && pool.length > 0; i++) {
+    const idx = Math.floor(Math.random() * pool.length);
+    picked.push(pool[idx]);
+    pool.splice(idx, 1);
+  }
+  return picked;
+}
+
+function getDiscardRisk(card, trumpSuit) {
+  if (!card) return 0;
+  const base = getCardValueForContract(card, trumpSuit);
+
+  if (trumpSuit === 'sans-atout') {
+    if (card.rank === 'as') return base + 12;
+    if (card.rank === '10') return base + 7;
+    return base;
+  }
+
+  if (trumpSuit === 'tout-atout') {
+    if (card.rank === 'valet') return base + 10;
+    if (card.rank === '9') return base + 8;
+    return base;
+  }
+
+  if (card.suit === trumpSuit) {
+    if (card.rank === 'valet') return base + 12;
+    if (card.rank === '9') return base + 9;
+  }
+
+  if (card.rank === 'as') return base + 8;
+  if (card.rank === '10') return base + 5;
+  return base;
+}
 
 function pickRandom(arr) {
   if (!arr || arr.length === 0) return null;
@@ -149,19 +353,133 @@ function bestBidFromHand(hand) {
   return candidates[0];
 }
 
-function chooseBid(game) {
-  // Keep previous behavior constraint: if any bid already exists, bot passes.
-  const hasAnyBid = Array.isArray(game.bids) && game.bids.some(b => b.type === 'bid');
-  if (hasAnyBid) return { type: 'pass' };
+function getLastBidEntry(bids) {
+  if (!Array.isArray(bids) || bids.length === 0) return null;
+  for (let i = bids.length - 1; i >= 0; i--) {
+    const b = bids[i];
+    if (b && (b.type === 'bid' || b.type === 'pass' || b.type === 'coinche' || b.type === 'surcoinche')) {
+      return b;
+    }
+  }
+  return null;
+}
 
+function getHighestBidEntry(bids) {
+  if (!Array.isArray(bids) || bids.length === 0) return null;
+  // “Highest” in this simple engine is the latest 'bid' entry.
+  for (let i = bids.length - 1; i >= 0; i--) {
+    const b = bids[i];
+    if (b && b.type === 'bid') return b;
+  }
+  return null;
+}
+
+function shouldAllowPartnerRaise(game) {
+  const topBid = getHighestBidEntry(game?.bids);
+  if (!topBid || topBid.type !== 'bid') return false;
+  if (!topBid.player) return false;
+
+  // Never “remonter” if the current highest bid is already ours.
+  if (topBid.player === game.currentPlayer) return false;
+
+  // Only raise suit bids (explicitly exclude TA/SA)
+  if (!topBid.suit || topBid.suit === 'tout-atout' || topBid.suit === 'sans-atout') return false;
+
+  const partnerPos = typeof getPartner === 'function' ? getPartner(game.currentPlayer) : null;
+  if (!partnerPos) return false;
+  if (topBid.player !== partnerPos) return false;
+
+  // Prevent “re-remonter”: if we already bid this same suit after partner's bid, do not raise again.
+  // This covers: partner bids ♦, bot raises ♦, partner bids ♦ again (not possible in standard bidding), etc.
+  for (let i = (game.bids?.length || 0) - 1; i >= 0; i--) {
+    const b = game.bids[i];
+    if (!b) continue;
+    if (b.type !== 'bid') continue;
+    if (b.player === partnerPos && b.suit === topBid.suit) {
+      // We reached partner's bid in history; if we didn't find our own same-suit bid after it, allow.
+      return true;
+    }
+    if (b.player === game.currentPlayer && b.suit === topBid.suit) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+function computePartnerRaiseIncrement(hand, partnerSuit, partnerPoints) {
+  // Spec (IA only):
+  // - never for TA/SA
+  // - if partnerPoints < 100: base +20, +20 if trump J, +10 if trump 9
+  // - if 100..120: base same for J/9, +10 per ace
+  // - always: +20 if belote at partner suit
+
+  if (!partnerSuit || partnerSuit === 'tout-atout' || partnerSuit === 'sans-atout') return 0;
+  const hasJ = hand.some(c => c && c.suit === partnerSuit && c.rank === 'valet');
+  const has9 = hand.some(c => c && c.suit === partnerSuit && c.rank === '9');
+  const aceCount = hand.filter(c => c && c.rank === 'as').length;
+  const belote = hasBelote(hand, partnerSuit);
+
+  let inc = 0;
+  if (partnerPoints < 100) {
+    inc += 20;
+    if (hasJ) inc += 20;
+    if (has9) inc += 10;
+  } else if (partnerPoints >= 100 && partnerPoints <= 120) {
+    if (hasJ) inc += 20;
+    if (has9) inc += 10;
+    inc += aceCount * 10;
+  } else {
+    // Not specified; keep conservative: no raise.
+    inc += 0;
+  }
+
+  if (belote) inc += 20;
+  return inc;
+}
+
+function chooseBid(game) {
   const hand = game.hands?.[game.currentPlayer] || [];
+  const topBid = getHighestBidEntry(game.bids);
+  const myTeam = typeof getTeam === 'function' ? getTeam(game.currentPlayer) : null;
+  const topBidTeam = topBid?.player && typeof getTeam === 'function' ? getTeam(topBid.player) : null;
+
+  // IA-only: allow a single “remonter” of partner's suit bid (non TA/SA) based on our hand.
+  if (shouldAllowPartnerRaise(game)) {
+    const partnerBid = getHighestBidEntry(game.bids);
+    const inc = computePartnerRaiseIncrement(hand, partnerBid.suit, partnerBid.points);
+    const target = clampToBidSteps(partnerBid.points + inc);
+    if (target > partnerBid.points) {
+      return { type: 'bid', points: target, suit: partnerBid.suit };
+    }
+  }
+
   const best = bestBidFromHand(hand);
-  if (!best || !best.points || best.points < 80) {
-    // If opening hand looks weak, still open at 80 in a random suit?
-    // Prefer conservative: pass.
+
+  // Opening bid
+  if (!topBid) {
+    if (!best || !best.points || best.points < 80) return { type: 'pass' };
+    return { type: 'bid', points: best.points, suit: best.suit };
+  }
+
+  // If partner currently has the contract and we didn't trigger a meaningful raise: pass.
+  if (myTeam && topBidTeam && myTeam === topBidTeam) {
     return { type: 'pass' };
   }
-  return { type: 'bid', points: best.points, suit: best.suit };
+
+  // Competitive overcall: if our best estimate beats current contract by at least one step.
+  // Slightly conservative to avoid suicidal overbids.
+  if (best && best.points >= 80 && best.points >= topBid.points + 10) {
+    if (best.points >= 100 || topBid.points <= 100) {
+      return { type: 'bid', points: best.points, suit: best.suit };
+    }
+  }
+
+  // Weak fallback against high enemy contracts.
+  if (!best || !best.points || best.points < 80) {
+    return { type: 'pass' };
+  }
+  return { type: 'pass' };
 }
 
 function chooseCard(game, position) {
@@ -170,198 +488,177 @@ function chooseCard(game, position) {
 
   if (!hand.length || !trumpSuit) return null;
 
-  // Use engine rule for playable cards.
-  // It's not exported; we can rely on getStateForPlayer which exposes playableCards.
   const stateForBot = game.getStateForPlayer(position);
   const playable = stateForBot.playableCards || [];
 
   if (!playable.length) return null;
 
-  const contractTeam = game.contract?.team;
-  const myTeam = game.getStateForPlayer(position)?.myTeam;
-  const iAmAttack = !!contractTeam && contractTeam === myTeam;
+  if (playable.length === 1) return playable[0];
 
-  const partnerByPos = { sud: 'nord', nord: 'sud', est: 'ouest', ouest: 'est' };
-  const partnerPos = partnerByPos[position];
-
-  // --- History helpers ---
+  const myTeam = stateForBot.myTeam;
   const history = Array.isArray(stateForBot.playHistory) ? stateForBot.playHistory : [];
-  const playedCards = history.map(h => h.card).filter(Boolean);
+  const alreadyPlayed = history.map(h => h.card).filter(Boolean);
 
-  const allTrumps = (tSuit) => {
-    if (tSuit === 'sans-atout') return [];
-    if (tSuit === 'tout-atout') return ['coeur', 'carreau', 'trefle', 'pique'];
-    return [tSuit];
-  };
+  const isSuitTrumpContract = SUITS.includes(trumpSuit);
+  const isLeadingNewTrick = (game.currentTrick?.length || 0) === 0;
+  const lastWinnerTeam = game.lastTrickWinner && typeof getTeam === 'function'
+    ? getTeam(game.lastTrickWinner)
+    : null;
+  const teamJustWonPreviousTrick = !!lastWinnerTeam && lastWinnerTeam === myTeam;
 
-  const trumpSuits = allTrumps(trumpSuit);
-  const isTrumpCard = (card) => {
-    if (!card) return false;
-    if (trumpSuit === 'sans-atout') return false;
-    if (trumpSuit === 'tout-atout') return true;
-    return card.suit === trumpSuit;
-  };
+  const myTrumpCount = isSuitTrumpContract
+    ? hand.filter(c => c.suit === trumpSuit).length
+    : 0;
+  const trumpsAlreadyPlayed = isSuitTrumpContract
+    ? alreadyPlayed.filter(c => c.suit === trumpSuit).length
+    : 0;
 
-  const trumpPlayedCount = playedCards.filter(isTrumpCard).length;
-  const totalTrumpCards = trumpSuit === 'sans-atout' ? 0 : (trumpSuit === 'tout-atout' ? 32 : 8);
-  const trumpsRemainingGlobal = Math.max(0, totalTrumpCards - trumpPlayedCount);
+  // Approximation conservative: if not all trumps are known (played + in hand),
+  // assume opponents may still hold trumps and prioritize drawing them.
+  const unknownTrumpsOutsideMyHand = isSuitTrumpContract
+    ? Math.max(0, 8 - (trumpsAlreadyPlayed + myTrumpCount))
+    : 0;
 
-  const hasRankBeenPlayed = (suit, rank) => playedCards.some(c => c.suit === suit && c.rank === rank);
-  const isAceMasterLikely = (suit) => !hasRankBeenPlayed(suit, 'as');
-  const isTenSecond = (suit) => hasRankBeenPlayed(suit, 'as') && !hasRankBeenPlayed(suit, '10');
+  const shouldPullTrumpsNow =
+    isSuitTrumpContract &&
+    isLeadingNewTrick &&
+    teamJustWonPreviousTrick &&
+    myTrumpCount > 0 &&
+    unknownTrumpsOutsideMyHand > 0;
 
-  // Simple strength ordering (matches engine definitions)
-  const TRUMP_ORDER = ['7', '8', 'dame', 'roi', '10', 'as', '9', 'valet'];
-  const PLAIN_ORDER = ['7', '8', '9', 'valet', 'dame', 'roi', '10', 'as'];
+  const fullDeck = buildDeck();
+  const knownCards = [...hand, ...alreadyPlayed];
+  const unknownCards = removeCardsFromDeck(fullDeck, knownCards);
 
-  // Current trick info
-  const trick = game.currentTrick || [];
-  const ledSuit = trick.length ? trick[0].card.suit : null;
-  const partnerHasPlayedThisTrick = trick.some(p => p.player === partnerPos);
+  const remainingPlayers = [];
+  let cursor = position;
+  const trickAfterMyPlaySize = (game.currentTrick?.length || 0) + 1;
+  for (let i = trickAfterMyPlaySize; i < 4; i++) {
+    cursor = typeof getNextPlayer === 'function'
+      ? getNextPlayer(cursor)
+      : ({ sud: 'ouest', ouest: 'nord', nord: 'est', est: 'sud' }[cursor]);
+    remainingPlayers.push(cursor);
+  }
 
-  const strengthInTrick = (card, led) => {
-    if (!card || !led) return -999;
-    // sans-atout: only led suit matters
-    if (trumpSuit === 'sans-atout') {
-      return card.suit === led ? PLAIN_ORDER.indexOf(card.rank) : -1;
+  const cardsLeft = stateForBot.cardsLeft || {};
+  const knownOtherHands = {};
+  for (const p of remainingPlayers) {
+    const n = cardsLeft[p] || 0;
+    knownOtherHands[p] = n;
+  }
+
+  const sampleCount = remainingPlayers.length === 0 ? 1 : 48;
+
+  function sampleHandsForRemainingPlayers() {
+    const pool = [...unknownCards];
+    const sampled = {};
+    for (const p of remainingPlayers) {
+      sampled[p] = drawRandomCards(pool, knownOtherHands[p] || 0);
     }
+    return sampled;
+  }
 
-    // tout-atout: every suit uses trump order, but must follow led suit
-    if (trumpSuit === 'tout-atout') {
-      return card.suit === led ? (100 + TRUMP_ORDER.indexOf(card.rank)) : -1;
-    }
+  function trickPoints(trick) {
+    return trick.reduce((sum, play) => sum + getCardValueForContract(play.card, trumpSuit), 0);
+  }
 
-    // normal trump
-    if (card.suit === trumpSuit) return 100 + TRUMP_ORDER.indexOf(card.rank);
-    return card.suit === led ? PLAIN_ORDER.indexOf(card.rank) : -1;
-  };
+  function simulateResponseCard(legal, playerPos, trickBefore) {
+    if (!legal.length) return null;
+    if (legal.length === 1) return legal[0];
 
-  const getCurrentTrickWinner = () => {
-    if (!trick.length) return null;
-    const led = trick[0].card.suit;
-    let best = trick[0];
-    let bestStr = strengthInTrick(best.card, led);
-    for (let i = 1; i < trick.length; i++) {
-      const s = strengthInTrick(trick[i].card, led);
-      if (s > bestStr) {
-        bestStr = s;
-        best = trick[i];
-      }
-    }
-    return { player: best.player, card: best.card, strength: bestStr, ledSuit: led };
-  };
-  const strength = (card) => {
-    if (!card) return -999;
-    if (trumpSuit === 'sans-atout') {
-      // higher = stronger
-      return PLAIN_ORDER.indexOf(card.rank);
-    }
-    if (trumpSuit === 'tout-atout') {
-      return TRUMP_ORDER.indexOf(card.rank);
-    }
-    if (card.suit === trumpSuit) return 100 + TRUMP_ORDER.indexOf(card.rank);
-    return PLAIN_ORDER.indexOf(card.rank);
-  };
+    const team = typeof getTeam === 'function' ? getTeam(playerPos) : null;
+    let best = legal[0];
+    let bestScore = -Infinity;
 
-  const valueForDiscard = (card) => {
-    if (!card) return 0;
-    // Rough points preservation
-    if (card.rank === 'as') return 50;
-    if (card.rank === '10') return 35;
-    if (card.rank === 'roi') return 10;
-    if (card.rank === 'dame') return 8;
-    if (card.rank === 'valet') return isTrumpCard(card) ? 45 : 6;
-    if (card.rank === '9') return isTrumpCard(card) ? 30 : 2;
-    return 1;
-  };
+    for (const card of legal) {
+      const projected = [...trickBefore, { player: playerPos, card }];
+      const current = determineCurrentWinnerEntry(projected, trumpSuit);
+      const pts = trickPoints(projected);
 
-  const filterTrumps = (cards) => cards.filter(isTrumpCard);
-  const filterNonTrumps = (cards) => cards.filter(c => !isTrumpCard(c));
-  const lowestByStrength = (cards) => [...cards].sort((a, b) => strength(a) - strength(b))[0] || null;
-  const highestByStrength = (cards) => [...cards].sort((a, b) => strength(b) - strength(a))[0] || null;
-
-  const currentWinner = getCurrentTrickWinner();
-  const partnerCurrentlyWinning = !!currentWinner && currentWinner.player === partnerPos;
-  const iAmCurrentlyWinning = !!currentWinner && currentWinner.player === position;
-
-  const minimalWinningCard = (cards) => {
-    if (!currentWinner || !cards.length) return null;
-    const led = currentWinner.ledSuit;
-    const target = currentWinner.strength;
-    const winners = cards
-      .map(c => ({ c, s: strengthInTrick(c, led) }))
-      .filter(x => x.s > target)
-      .sort((a, b) => a.s - b.s);
-    return winners[0]?.c || null;
-  };
-
-  // --- Decision policy ---
-  // 1) If on attack: pull trumps early while trumps remain.
-  //    Prefer low trump if partner already in trick (to avoid wasting), else choose a mid/high trump.
-  if (iAmAttack && trumpSuit !== 'sans-atout' && trumpsRemainingGlobal > 0) {
-    const playableTrumps = filterTrumps(playable);
-    if (playableTrumps.length) {
-      // If partner is already winning this trick, conserve.
-      if (partnerHasPlayedThisTrick && partnerCurrentlyWinning) {
-        return lowestByStrength(playableTrumps);
+      let score = 0;
+      if (projected.length === 4 && current) {
+        const winnerTeam = typeof getTeam === 'function' ? getTeam(current.winner.player) : null;
+        score += winnerTeam === team ? pts : -pts;
+      } else if (current) {
+        const winnerTeam = typeof getTeam === 'function' ? getTeam(current.winner.player) : null;
+        score += winnerTeam === team ? 4 : -4;
       }
 
-      // If we are not winning and need to take, use the smallest winning trump if possible.
-      if (currentWinner && !partnerCurrentlyWinning && !iAmCurrentlyWinning) {
-        const win = minimalWinningCard(playableTrumps);
-        if (win) return win;
+      score -= getDiscardRisk(card, trumpSuit) * 0.15;
+
+      if (score > bestScore) {
+        bestScore = score;
+        best = card;
+      }
+    }
+
+    return best;
+  }
+
+  function evaluateCandidate(card) {
+    let total = 0;
+
+    for (let s = 0; s < sampleCount; s++) {
+      const sampledHands = sampleHandsForRemainingPlayers();
+      const trick = [...(game.currentTrick || []), { player: position, card }];
+
+      let last = position;
+      while (trick.length < 4) {
+        const p = typeof getNextPlayer === 'function'
+          ? getNextPlayer(last)
+          : ({ sud: 'ouest', ouest: 'nord', nord: 'est', est: 'sud' }[last]);
+
+        const handP = sampledHands[p] || [];
+        const legal = getPlayableCardsForSimulation(handP, trick, trumpSuit, p);
+        const chosen = simulateResponseCard(legal, p, trick) || legal[0];
+        if (!chosen) break;
+
+        const idx = handP.findIndex(c => cardEquals(c, chosen));
+        if (idx >= 0) handP.splice(idx, 1);
+        trick.push({ player: p, card: chosen });
+        last = p;
       }
 
-      // Otherwise keep pressure: play a strong trump.
-      return highestByStrength(playableTrumps);
+      const current = determineCurrentWinnerEntry(trick, trumpSuit);
+      if (!current) continue;
+
+      const winnerTeam = typeof getTeam === 'function' ? getTeam(current.winner.player) : null;
+      const pts = trickPoints(trick);
+
+      let utility = winnerTeam === myTeam ? pts : -pts;
+
+      if (winnerTeam === myTeam) {
+        utility += current.winner.player === position ? 4 : 2;
+      } else {
+        utility -= 2;
+      }
+
+      const discardPenalty = winnerTeam === myTeam ? 0.05 : 0.45;
+      utility -= getDiscardRisk(card, trumpSuit) * discardPenalty;
+
+      total += utility;
+    }
+
+    return total / sampleCount;
+  }
+
+  const candidateCards = shouldPullTrumpsNow
+    ? playable.filter(c => c.suit === trumpSuit)
+    : playable;
+
+  const cardsToEvaluate = candidateCards.length > 0 ? candidateCards : playable;
+
+  let bestCard = cardsToEvaluate[0];
+  let bestScore = -Infinity;
+  for (const c of cardsToEvaluate) {
+    const score = evaluateCandidate(c);
+    if (score > bestScore) {
+      bestScore = score;
+      bestCard = c;
     }
   }
 
-  // 2) Play master aces when you can lead or follow safely.
-  //    If ledSuit is present, and ace of that suit is playable and likely master, do it.
-  const playableAces = playable.filter(c => c.rank === 'as');
-  const masterAce = playableAces.find(c => isAceMasterLikely(c.suit));
-  if (masterAce) {
-    // At suit contracts, avoid throwing an ace into a cut if trumps still around and we're leading.
-    if (trumpSuit !== 'sans-atout' && trick.length === 0 && trumpsRemainingGlobal > 4) {
-      // Prefer pulling trumps already handled above; otherwise keep ace for later.
-    } else {
-      return masterAce;
-    }
-  }
-
-  // 3) Protect 10s until they become “second” (Ace played).
-  //    If you have a 10 that is NOT second, avoid playing it unless forced.
-  const tens = playable.filter(c => c.rank === '10');
-  const unsafeTen = tens.find(c => !isTenSecond(c.suit));
-  if (unsafeTen && playable.length > 1) {
-    const withoutUnsafeTen = playable.filter(c => !(c.suit === unsafeTen.suit && c.rank === '10'));
-    if (withoutUnsafeTen.length) {
-      // Prefer low discard
-      return lowestByStrength(withoutUnsafeTen);
-    }
-  }
-
-  // 4) If you can play a “10 second”, prefer cashing it.
-  const safeTen = tens.find(c => isTenSecond(c.suit));
-  if (safeTen) return safeTen;
-
-  // 5) Defense preference: if defending and can play trumps, try to cut/pull too.
-  if (!iAmAttack && trumpSuit !== 'sans-atout') {
-    const playableTrumps = filterTrumps(playable);
-    if (playableTrumps.length) {
-      if (partnerCurrentlyWinning) return lowestByStrength(playableTrumps);
-      if (currentWinner) {
-        const win = minimalWinningCard(playableTrumps);
-        if (win) return win;
-      }
-      return highestByStrength(playableTrumps);
-    }
-  }
-
-  // 6) Default: discard the lowest-value card (avoid dropping points)
-  const sortedByDiscard = [...playable].sort((a, b) => valueForDiscard(a) - valueForDiscard(b));
-  return sortedByDiscard[0] || pickRandom(playable);
+  return bestCard || pickRandom(playable);
 }
 
 module.exports = {
