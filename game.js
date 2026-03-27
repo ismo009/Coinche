@@ -524,7 +524,7 @@ class CoincheGame {
     if (bid.type === 'bid') {
       if (this.coincheBy) return { success: false, error: 'Enchère coinchée, vous pouvez seulement passer ou surcoincher' };
 
-      const validPoints = [80, 90, 100, 110, 120, 130, 140, 150, 160, 250, 400, 500];
+      const validPoints = [80, 90, 100, 110, 120, 130, 140, 150, 160, 250, 270, 500];
       if (!validPoints.includes(bid.points)) {
         return { success: false, error: 'Nombre de points invalide' };
       }
@@ -675,14 +675,24 @@ class CoincheGame {
 
     let contractMet = contractPoints >= this.contract.points;
 
-    // Capot: si contrat de 250 (capot), il faut tous les plis
+    // Capot: il faut tous les plis de l'équipe
     if (this.contract.points === 250) {
       contractMet = this.tricksTaken[defenseTeam].length === 0;
     }
 
+    // Capot beloté (270): tous les plis + belote/rebelote de l'attaque
+    if (this.contract.points === 270) {
+      const tookAllTricks = this.tricksTaken[defenseTeam].length === 0;
+      const hasBelote = Object.values(this.beloteAnnounced[contractTeam]).some(v => v === 'rebelote');
+      contractMet = tookAllTricks && hasBelote;
+    }
+
     // Générale: 500 points
     if (this.contract.points === 500) {
-      contractMet = this.tricksTaken[defenseTeam].length === 0;
+      const attackTricks = this.tricksTaken[contractTeam];
+      const bidderTookAll = attackTricks.length === 8 &&
+        attackTricks.every(trick => determineTrickWinner(trick, this.contract.suit) === this.contract.player);
+      contractMet = bidderTookAll;
     }
 
     let scoreNS = 0;
@@ -691,19 +701,29 @@ class CoincheGame {
     if (this.contract.coinched) multiplier = 2;
     if (this.contract.surcoinched) multiplier = 3;
     const contractBonus = this.contract.points * multiplier;
+    const isSpecialBid = this.contract.points === 250 || this.contract.points === 270 || this.contract.points === 500;
+    const capotWithoutSpecialBid = !isSpecialBid && this.tricksTaken[defenseTeam].length === 0;
 
     if (contractMet) {
       // Le contrat est réussi
       if (contractTeam === 'ns') {
-        if (this.contract.points === 250 || this.contract.points === 500) {
-          scoreNS = contractBonus + belotePoints.ns;
+        if (this.contract.points === 250 || this.contract.points === 270 || this.contract.points === 500) {
+          // Annonces spéciales: annonce + points faits
+          scoreNS = contractPoints + contractBonus;
+        } else if (capotWithoutSpecialBid) {
+          // Capot non annoncé: 252 + points de l'annonce
+          scoreNS = 252 + contractBonus;
         } else {
           scoreNS = contractPoints + contractBonus;
         }
         scoreEO = defensePoints;
       } else {
-        if (this.contract.points === 250 || this.contract.points === 500) {
-          scoreEO = contractBonus + belotePoints.eo;
+        if (this.contract.points === 250 || this.contract.points === 270 || this.contract.points === 500) {
+          // Annonces spéciales: annonce + points faits
+          scoreEO = contractPoints + contractBonus;
+        } else if (capotWithoutSpecialBid) {
+          // Capot non annoncé: 252 + points de l'annonce
+          scoreEO = 252 + contractBonus;
         } else {
           scoreEO = contractPoints + contractBonus;
         }
@@ -722,6 +742,7 @@ class CoincheGame {
       }
     }
 
+    // Arrondi des scores comme avant (a la dizaine)
     scoreNS = roundScore(scoreNS);
     scoreEO = roundScore(scoreEO);
 

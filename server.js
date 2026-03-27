@@ -34,6 +34,13 @@ function broadcastMessage(roomId, message, type = 'info') {
   io.to(roomId).emit('message', { text: message, type });
 }
 
+function formatBidPoints(points) {
+  if (points === 270) return 'Capot beloté (270)';
+  if (points === 250) return 'Capot (250)';
+  if (points === 500) return 'Générale (500)';
+  return `${points}`;
+}
+
 io.on('connection', (socket) => {
   console.log(`Joueur connecté: ${socket.id}`);
 
@@ -128,7 +135,7 @@ io.on('connection', (socket) => {
     } else if (data.type === 'surcoinche') {
       broadcastMessage(currentRoom, `${playerName} SURCOINCHE !`, 'danger');
     } else if (data.type === 'bid') {
-      broadcastMessage(currentRoom, `${playerName} annonce ${data.points} ${suitNames[data.suit] || data.suit}`);
+      broadcastMessage(currentRoom, `${playerName} annonce ${formatBidPoints(data.points)} ${suitNames[data.suit] || data.suit}`);
     }
 
     if (result.action === 'redistribute') {
@@ -138,7 +145,7 @@ io.on('connection', (socket) => {
 
     if (result.action === 'play') {
       const suitName = suitNames[game.contract.suit] || game.contract.suit;
-      let msg = `Contrat: ${game.contract.points} ${suitName} par ${game.players[game.contract.player].name}`;
+      let msg = `Contrat: ${formatBidPoints(game.contract.points)} ${suitName} par ${game.players[game.contract.player].name}`;
       if (game.contract.coinched) msg += ' (COINCHÉ)';
       if (game.contract.surcoinched) msg += ' (SURCOINCÉ)';
       broadcastMessage(currentRoom, msg, 'success');
@@ -224,6 +231,27 @@ io.on('connection', (socket) => {
 
     const available = POSITIONS.filter(pos => !game.players[pos]);
     socket.emit('available-positions', { positions: available });
+  });
+
+  socket.on('chat-message', (data) => {
+    if (!currentRoom) return;
+    const game = games.get(currentRoom);
+    if (!game) return;
+
+    const position = game.getPlayerPosition(socket.id);
+    if (!position) return;
+
+    const rawText = typeof data?.text === 'string' ? data.text : '';
+    const text = rawText.replace(/\s+/g, ' ').trim().slice(0, 180);
+    if (!text) return;
+
+    const senderName = game.players[position]?.name || playerName || 'Joueur';
+    io.to(currentRoom).emit('chat-message', {
+      from: senderName,
+      position,
+      text,
+      timestamp: Date.now()
+    });
   });
 
   socket.on('disconnect', () => {

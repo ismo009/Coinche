@@ -33,7 +33,7 @@ Le serveur demarre sur `http://localhost:3000`.
 
 - 4 joueurs: Nord-Sud vs Est-Ouest.
 - 32 cartes: `7 8 9 10 valet dame roi as`.
-- Contrats: `80` a `160`, `250` (capot), `400`, `500` (generale).
+- Contrats: `80` a `160`, `250` (capot), `270` (capot belote), `500` (generale).
 - Atouts: `coeur`, `carreau`, `trefle`, `pique`, `tout-atout`, `sans-atout`.
 - Dernier pli: +10 points.
 - Belote/Rebelote: +20 points (selon les conditions du contrat).
