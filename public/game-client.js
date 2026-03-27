@@ -103,6 +103,45 @@ function initMobileChatToggle() {
 
   // Prevent the close button from acting as a drag handle on desktop.
   chatUi.closeBtn.addEventListener('mousedown', (e) => {
+
+function initDesktopChatCollapse() {
+  if (!chatUi.panel || !chatUi.openBtn || !chatUi.closeBtn) return;
+
+  const setCollapsed = (collapsed) => {
+    document.body.classList.toggle('chat-collapsed', !!collapsed);
+    try {
+      localStorage.setItem('coinche:chat-collapsed', collapsed ? '1' : '0');
+    } catch {
+      // ignore
+    }
+  };
+
+  // Only apply on desktop/tablet layouts.
+  if (isPhoneUi()) {
+    setCollapsed(false);
+    return;
+  }
+
+  // Restore
+  try {
+    const saved = localStorage.getItem('coinche:chat-collapsed');
+    if (saved === '1') setCollapsed(true);
+  } catch {
+    // ignore
+  }
+
+  chatUi.closeBtn.addEventListener('click', () => {
+    if (isPhoneUi()) return;
+    setCollapsed(true);
+  });
+
+  chatUi.openBtn.addEventListener('click', () => {
+    if (isPhoneUi()) return;
+    setCollapsed(false);
+  });
+}
+
+initDesktopChatCollapse();
     e.stopPropagation();
   });
 
@@ -1203,6 +1242,105 @@ function updatePlayers() {
   }
 }
 
+function getBidLogoUrlForSuit(suit) {
+  // Dedicated suit icons (transparent PNG) stored under /public/logo.
+  const suitMap = {
+    coeur: 'COEUR.png',
+    carreau: 'CARREAU.png',
+    trefle: 'TREFLE.png',
+    pique: 'PIC.png'
+  };
+  const file = suitMap[suit];
+  if (!file) return null;
+  return `/logo/${file}`;
+}
+
+function ensureBidBubbleEl(playerAreaEl) {
+  if (!playerAreaEl) return null;
+  let el = playerAreaEl.querySelector('.bid-bubble');
+  if (el) return el;
+  el = document.createElement('div');
+  el.className = 'bid-bubble hidden';
+  el.innerHTML = `
+    <div class="bid-bubble__inner">
+      <img class="bid-bubble__logo" alt="" />
+      <span class="bid-bubble__points"></span>
+    </div>
+  `;
+  // Prefer anchoring to the info header so placement is consistent across orientations.
+  const info = playerAreaEl.querySelector('.player-info');
+  (info || playerAreaEl).appendChild(el);
+  return el;
+}
+
+function updateBidBubbles() {
+  // Temporarily disable bubbles on mobile UI.
+  if (isPhoneUi()) {
+    hideAllBidBubbles();
+    return;
+  }
+
+  const absToVisual = getAbsToVisual();
+  const positions = ['sud', 'ouest', 'nord', 'est'];
+
+  // Gather latest bid per player (only actual bids with points).
+  const latestByPlayer = {};
+  if (gameState && Array.isArray(gameState.bids)) {
+    for (const b of gameState.bids) {
+      if (b && b.type === 'bid' && typeof b.points === 'number' && b.suit) {
+        latestByPlayer[b.player] = b;
+      }
+    }
+  }
+
+  for (const absPos of positions) {
+    const visualPos = absToVisual[absPos];
+    // DOM uses english seat classes: .player-north/.player-south/.player-east/.player-west
+    const seatClass = {
+      sud: 'south',
+      nord: 'north',
+      est: 'east',
+      ouest: 'west'
+    }[visualPos] || visualPos;
+
+    const playerArea = document.querySelector(`.player-area.player-${seatClass}`);
+    const bubble = ensureBidBubbleEl(playerArea);
+    if (!bubble) continue;
+
+    if (!gameState || gameState.state !== 'bidding') {
+      bubble.classList.add('hidden');
+      continue;
+    }
+
+    const bid = latestByPlayer[absPos];
+    if (!bid) {
+      bubble.classList.add('hidden');
+      continue;
+    }
+
+    const logoUrl = getBidLogoUrlForSuit(bid.suit);
+    const img = bubble.querySelector('.bid-bubble__logo');
+    const pointsEl = bubble.querySelector('.bid-bubble__points');
+
+    if (img) {
+      if (logoUrl) {
+        img.src = logoUrl;
+        img.classList.remove('hidden');
+      } else {
+        img.removeAttribute('src');
+        img.classList.add('hidden');
+      }
+    }
+    if (pointsEl) pointsEl.textContent = String(bid.points);
+
+    bubble.classList.remove('hidden');
+  }
+}
+
+function hideAllBidBubbles() {
+  document.querySelectorAll('.bid-bubble').forEach((el) => el.classList.add('hidden'));
+}
+
 function updateTrick() {
   const absToVisual = getAbsToVisual();
 
@@ -1311,6 +1449,7 @@ function updateBidding() {
 
   if (gameState.state !== 'bidding') {
     panel.classList.add('hidden');
+    hideAllBidBubbles();
     return;
   }
 
@@ -1389,6 +1528,9 @@ function updateBidding() {
   } else {
     pointsSelect.value = '80';
   }
+
+  // Per-player visual bubbles above each seat during bidding.
+  updateBidBubbles();
 }
 
 function getTeamFromPos(pos) {
