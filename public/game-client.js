@@ -739,6 +739,84 @@ function updatePlayers() {
   }
 }
 
+function getBidLogoUrlForSuit(suit) {
+  // Use existing 400x400 transparent PNG assets shipped with card faces.
+  // We use the Ace as a clean suit logo.
+  const suitMap = {
+    coeur: 'AS_COEUR.png',
+    carreau: 'AS_CARREAU.png',
+    trefle: 'AS_TREFLE.png',
+    pique: 'AS_PIC.png'
+  };
+  const file = suitMap[suit];
+  if (!file) return null;
+  return `${CARD_TEXTURES.baseUrl}/${file}`;
+}
+
+function ensureBidBubbleEl(playerAreaEl) {
+  if (!playerAreaEl) return null;
+  let el = playerAreaEl.querySelector('.bid-bubble');
+  if (el) return el;
+  el = document.createElement('div');
+  el.className = 'bid-bubble hidden';
+  el.innerHTML = `
+    <img class="bid-bubble__logo" alt="" />
+    <span class="bid-bubble__points"></span>
+  `;
+  playerAreaEl.appendChild(el);
+  return el;
+}
+
+function updateBidBubbles() {
+  const absToVisual = getAbsToVisual();
+  const positions = ['sud', 'ouest', 'nord', 'est'];
+
+  // Gather latest bid per player (only actual bids with points).
+  const latestByPlayer = {};
+  if (gameState && Array.isArray(gameState.bids)) {
+    for (const b of gameState.bids) {
+      if (b && b.type === 'bid' && typeof b.points === 'number' && b.suit) {
+        latestByPlayer[b.player] = b;
+      }
+    }
+  }
+
+  for (const absPos of positions) {
+    const visualPos = absToVisual[absPos];
+    const playerArea = document.querySelector(`.player-area.player-${visualPos}`);
+    const bubble = ensureBidBubbleEl(playerArea);
+    if (!bubble) continue;
+
+    if (!gameState || gameState.state !== 'bidding') {
+      bubble.classList.add('hidden');
+      continue;
+    }
+
+    const bid = latestByPlayer[absPos];
+    if (!bid) {
+      bubble.classList.add('hidden');
+      continue;
+    }
+
+    const logoUrl = getBidLogoUrlForSuit(bid.suit);
+    const img = bubble.querySelector('.bid-bubble__logo');
+    const pointsEl = bubble.querySelector('.bid-bubble__points');
+
+    if (img) {
+      if (logoUrl) {
+        img.src = logoUrl;
+        img.classList.remove('hidden');
+      } else {
+        img.removeAttribute('src');
+        img.classList.add('hidden');
+      }
+    }
+    if (pointsEl) pointsEl.textContent = String(bid.points);
+
+    bubble.classList.remove('hidden');
+  }
+}
+
 function updateTrick() {
   const absToVisual = getAbsToVisual();
 
@@ -847,6 +925,7 @@ function updateBidding() {
 
   if (gameState.state !== 'bidding') {
     panel.classList.add('hidden');
+    updateBidBubbles();
     return;
   }
 
@@ -926,6 +1005,9 @@ function updateBidding() {
   } else {
     pointsSelect.value = '80';
   }
+
+  // Per-player visual bubbles above each seat during bidding.
+  updateBidBubbles();
 }
 
 function getTeamFromPos(pos) {

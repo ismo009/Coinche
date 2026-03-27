@@ -94,6 +94,60 @@ body {
   display: none !important;
 }
 
+/* ============================================================
+   BIDDING BUBBLES (annonce)
+   ============================================================ */
+
+.player-area {
+  position: relative;
+}
+
+.bid-bubble {
+  position: absolute;
+  left: 50%;
+  top: -10px;
+  transform: translate(-50%, -100%);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 999px;
+  background: rgba(15, 15, 35, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+  color: var(--text);
+  z-index: 6;
+  pointer-events: none;
+}
+
+.bid-bubble__logo {
+  width: 22px;
+  height: 22px;
+  object-fit: contain;
+  filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.4));
+}
+
+.bid-bubble__points {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.4px;
+  color: var(--gold-light);
+}
+
+/* Small per-side positioning tweaks so the bubble feels attached */
+.player-area.player-north .bid-bubble {
+  top: -6px;
+}
+
+.player-area.player-south .bid-bubble {
+  top: -6px;
+}
+
+.player-area.player-west .bid-bubble,
+.player-area.player-east .bid-bubble {
+  top: 0;
+}
+
 .screen {
   min-height: 100vh;
   display: flex;
