@@ -2392,7 +2392,7 @@ body.chat-collapsed .chat-open-btn {
     bottom: calc(env(safe-area-inset-bottom, 0px) + 84px);
     width: auto;
     height: 240px;
-    z-index: 18;
+    z-index: 26;
   }
 
   #chat-panel::before {
@@ -2423,7 +2423,7 @@ body.chat-collapsed .chat-open-btn {
     position: fixed;
     left: 10px;
     bottom: calc(env(safe-area-inset-bottom, 0px) + 14px);
-    z-index: 18;
+    z-index: 26;
   }
 
   body.chat-open .chat-open-btn {
