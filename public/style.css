@@ -100,6 +100,69 @@ body {
   display: none !important;
 }
 
+/* ============================================================
+   BIDDING BUBBLES (annonce)
+   ============================================================ */
+
+.player-area {
+  position: relative;
+}
+
+/* Bubble is appended inside .player-info for consistent anchoring */
+.player-info {
+  position: relative;
+}
+
+.bid-bubble {
+  position: absolute;
+  left: 50%;
+  top: -12px;
+  transform: translate(-50%, -100%);
+  z-index: 8;
+  pointer-events: none;
+}
+
+.bid-bubble__inner {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 18px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.98);
+  border: 2px solid rgba(0, 0, 0, 0.92);
+  box-shadow: 0 16px 34px rgba(0, 0, 0, 0.35);
+}
+
+.bid-bubble__logo {
+  width: 52px;
+  height: 52px;
+  object-fit: contain;
+}
+
+.bid-bubble__points {
+  font-family: var(--font-display);
+  font-weight: 900;
+  font-size: 46px;
+  line-height: 1;
+  letter-spacing: 0.02em;
+  color: #0b0b12;
+}
+
+/* Seat tweaks */
+.player-west .player-info .bid-bubble,
+.player-east .player-info .bid-bubble {
+  top: -4px;
+}
+
+.player-north .player-info .bid-bubble {
+  top: calc(100% + 44px);
+  transform: translate(-50%, 0);
+}
+
+.player-south .player-info .bid-bubble {
+  top: -14px;
+}
+
 .screen {
   min-height: 100vh;
   display: flex;
@@ -230,9 +293,9 @@ body {
 
 .lobby-container {
   text-align: center;
-  padding: 46px 40px 38px;
-  max-width: 540px;
-  width: 92%;
+  padding: clamp(26px, 4vw, 44px);
+  max-width: 940px;
+  width: min(94vw, 940px);
   border-radius: 30px;
   background:
     linear-gradient(180deg, rgba(249, 241, 217, 0.98) 0%, rgba(246, 236, 212, 0.96) 100%);
@@ -241,6 +304,8 @@ body {
     0 32px 70px rgba(0, 0, 0, 0.45),
     inset 0 1px 0 rgba(255, 255, 255, 0.6);
   backdrop-filter: blur(2px);
+  display: grid;
+  gap: 18px;
 }
 
 .brand-logo {
@@ -251,8 +316,8 @@ body {
 }
 
 .brand-logo-lobby {
-  width: min(220px, 52vw);
-  margin-bottom: 12px;
+  width: clamp(160px, 22vw, 230px);
+  margin-bottom: 8px;
 }
 
 .brand-logo-waiting {
@@ -262,32 +327,47 @@ body {
 
 .lobby-container h1 {
   font-family: 'Playfair Display', Georgia, serif;
-  font-size: clamp(2.0rem, 4.0vw, 3.0rem);
-  font-weight: 100;
-  margin-bottom: 8px;
-  letter-spacing: 0.02em;
+  font-size: clamp(2.1rem, 4.3vw, 4rem);
+  font-weight: 800;
+  line-height: 1.04;
+  margin-bottom: 4px;
+  letter-spacing: 0.015em;
   background: linear-gradient(165deg, #274855 0%, #67442f 48%, #954a2f 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
   text-shadow: none;
-  filter: drop-shadow(0 3px 10px rgba(39, 72, 85, 0.25));
+  filter: drop-shadow(0 4px 12px rgba(39, 72, 85, 0.2));
+}
+
+.lobby-title {
+  max-width: 18ch;
+  margin-inline: auto;
+  text-wrap: balance;
 }
 
 .subtitle {
-  color: #274855;
-  margin-bottom: 30px;
-  font-size: 13px;
-  letter-spacing: 2.6px;
-  text-transform: uppercase;
-  font-weight: 700;
+  color: #355867;
+  margin-bottom: 0;
+  font-size: 14px;
+  letter-spacing: 0.03em;
+  text-transform: none;
+  font-weight: 600;
+}
+
+.lobby-form {
+  display: grid;
+  gap: 16px;
+  width: 100%;
+  max-width: 860px;
+  margin: 0 auto;
 }
 
 .lobby-form input,
 .lobby-form select {
   width: 100%;
   padding: 13px 15px;
-  margin-bottom: 14px;
+  margin-bottom: 0;
   border: 1.5px solid rgba(39, 72, 85, 0.3);
   border-radius: 14px;
   background: rgba(255, 253, 248, 0.98);
@@ -309,16 +389,132 @@ body {
 }
 
 .lobby-actions {
-  display: flex;
-  gap: 16px;
-  margin-top: 20px;
+  display: grid;
+  grid-template-columns: minmax(240px, 1fr) auto minmax(240px, 1fr);
+  gap: 14px;
   align-items: stretch;
 }
 
+.public-menu {
+  padding: 16px;
+  border-radius: 18px;
+  background: linear-gradient(180deg, rgba(252, 246, 231, 0.82), rgba(246, 236, 214, 0.74));
+  border: 1px solid rgba(39, 72, 85, 0.2);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6);
+}
+
+.public-menu h3 {
+  margin-bottom: 6px;
+  font-size: 13px;
+  color: #274855;
+  text-transform: uppercase;
+  letter-spacing: 1.7px;
+  font-weight: 800;
+}
+
+.public-menu-help {
+  margin: 0 0 10px;
+  font-size: 12px;
+  color: #45626e;
+  line-height: 1.35;
+}
+
+.public-menu-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.public-menu-actions .btn {
+  width: 100%;
+}
+
+.public-rooms-panel {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(39, 72, 85, 0.18);
+}
+
+.public-rooms-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+  font-size: 13px;
+  color: #274855;
+  font-weight: 700;
+}
+
+.public-rooms-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-height: 230px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.public-rooms-list::-webkit-scrollbar {
+  width: 4px;
+}
+
+.public-rooms-list::-webkit-scrollbar-thumb {
+  background: rgba(39, 72, 85, 0.24);
+  border-radius: 2px;
+}
+
+.lobby-made-by {
+  margin-top: 4px;
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  color: rgba(39, 72, 85, 0.82);
+  font-weight: 600;
+  text-align: center;
+}
+
+.public-room-entry {
+  display: grid;
+  grid-template-columns: 1fr minmax(140px, 42%);
+  align-items: center;
+  gap: 10px;
+  padding: 10px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.52);
+  border: 1px solid rgba(39, 72, 85, 0.18);
+}
+
+.public-room-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  text-align: left;
+}
+
+.public-room-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: #274855;
+}
+
+.public-room-subtitle {
+  font-size: 12px;
+  color: #4c626b;
+}
+
+.public-rooms-empty {
+  font-size: 12px;
+  color: #5e6f77;
+  text-align: center;
+  padding: 10px 4px;
+}
+
 .action-group {
-  flex: 1;
+  display: grid;
+  align-content: start;
+  gap: 10px;
   background: linear-gradient(180deg, rgba(252, 246, 231, 0.98), rgba(246, 236, 214, 0.96));
-  padding: 20px 18px;
+  padding: 18px 16px;
   border-radius: var(--radius-lg);
   border: 1px solid rgba(39, 72, 85, 0.24);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.55);
@@ -332,7 +528,7 @@ body {
 }
 
 .action-group h3 {
-  margin-bottom: 14px;
+  margin-bottom: 0;
   font-size: 12px;
   color: #67442f;
   text-transform: uppercase;
@@ -343,6 +539,7 @@ body {
 .separator {
   display: flex;
   align-items: center;
+  justify-content: center;
   color: #274855;
   font-weight: 700;
   font-size: 12px;
@@ -350,7 +547,8 @@ body {
   letter-spacing: 1px;
   background: rgba(249, 241, 217, 0.78);
   border: 1px solid rgba(39, 72, 85, 0.22);
-  padding: 0 12px;
+  min-width: 52px;
+  padding: 0 10px;
   border-radius: 999px;
 }
 
@@ -358,6 +556,14 @@ body {
   width: 100%;
   border-radius: 12px;
   border: 1px solid transparent;
+}
+
+.action-group .btn {
+  margin-top: 4px;
+}
+
+.public-room-entry .btn {
+  min-height: 42px;
 }
 
 #lobby .btn-primary {
@@ -382,7 +588,7 @@ body {
 
 .error-msg {
   color: #7a2c1f;
-  margin-top: 16px;
+  margin-top: 2px;
   padding: 12px 16px;
   background: rgba(149, 74, 47, 0.16);
   border-radius: var(--radius-md);
@@ -1349,9 +1555,26 @@ body.panel-dragging * {
   color: var(--text-muted);
 }
 
-.chat-close-btn,
+/* Desktop defaults: show collapse button, hide open button (it appears when collapsed). */
+.chat-close-btn {
+  display: inline-flex;
+}
+
 .chat-open-btn {
   display: none;
+}
+
+/* Desktop: allow collapsing chat like mobile */
+body.chat-collapsed #chat-panel {
+  display: none;
+}
+
+body.chat-collapsed .chat-open-btn {
+  display: inline-flex;
+  position: fixed;
+  right: 14px;
+  bottom: 14px;
+  z-index: 18;
 }
 
 .chat-header {
@@ -1724,12 +1947,24 @@ body.panel-dragging * {
   }
 
   .lobby-actions {
-    flex-direction: column;
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+
+  .public-menu-actions {
+    grid-template-columns: 1fr;
+  }
+
+  .public-room-entry {
+    grid-template-columns: 1fr;
+    gap: 8px;
   }
 
   .separator {
     justify-content: center;
-    padding: 10px 0;
+    min-height: 36px;
+    width: 100%;
+    padding: 8px 0;
   }
 
   .table-layout {
@@ -1815,60 +2050,99 @@ body.panel-dragging * {
   }
 
   .lobby-container h1 {
-    font-size: 2.2em;
+    font-size: 2.2rem;
+    letter-spacing: 0.015em;
+    font-weight: 700;
+  }
+
+  .lobby-container {
+    padding: 22px 14px 16px;
+    border-radius: 20px;
+  }
+
+  .lobby-form {
+    gap: 12px;
+  }
+
+  .action-group {
+    padding: 16px 12px;
+    gap: 10px;
+  }
+
+  .action-group .btn {
+    font-size: 14px;
+    font-weight: 600;
+    padding: 12px 16px;
+    min-height: 44px;
+    border-radius: 8px;
+  }
+
+  .public-menu {
+    padding: 12px;
+  }
+
+  .public-rooms-header {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
   }
 
   .brand-logo-lobby {
-    width: min(170px, 54vw);
-    margin-bottom: 8px;
+    width: min(160px, 50vw);
+    margin-bottom: 10px;
   }
 
   .brand-logo-waiting {
-    width: min(142px, 44vw);
-    margin-bottom: 6px;
+    width: min(138px, 42vw);
+    margin-bottom: 8px;
   }
 
   .table-layout {
     grid-template-columns: 60px 1fr 60px;
-    grid-template-rows: 85px 1fr 165px;
+    grid-template-rows: 90px 1fr 160px;
+    gap: 0;
   }
 
   .card {
-    width: 48px;
-    height: 70px;
+    width: 50px;
+    height: 72px;
   }
 
   .card .card-suit-icon {
-    font-size: 17px;
+    font-size: 18px;
   }
 
   .card .card-rank {
-    font-size: 11px;
+    font-size: 12px;
+    font-weight: 700;
   }
 
   .card .card-corner,
   .card .card-corner-bottom {
-    font-size: 8px;
+    font-size: 9px;
   }
 
   .trick-area {
-    width: 160px;
-    height: 160px;
+    width: 150px;
+    height: 150px;
+    border-radius: 12px;
+    background: rgba(0, 0, 0, 0.15);
+    border: 1px solid rgba(255, 255, 255, 0.05);
   }
 
   .last-trick-area {
-    width: 120px;
-    height: 120px;
+    width: 110px;
+    height: 110px;
   }
 
   .last-trick-area .card.trick-played {
-    width: 40px;
-    height: 58px;
+    width: 38px;
+    height: 54px;
   }
 
   .card.trick-played {
-    width: 45px;
-    height: 65px;
+    width: 44px;
+    height: 64px;
   }
 
   #bidding-panel {
@@ -1880,16 +2154,52 @@ body.panel-dragging * {
     width: 100%;
     transform: none;
     border-radius: var(--radius-lg) var(--radius-lg) 0 0;
-    max-height: 50vh;
+    max-height: 55vh;
+    padding: 14px 14px calc(env(safe-area-inset-bottom, 0px) + 12px);
+  }
+
+  #bidding-panel h3 {
+    font-size: 15px;
+    font-weight: 700;
+    margin-bottom: 14px;
+  }
+
+  .bid-row {
+    gap: 10px;
+    margin-bottom: 10px;
+  }
+
+  .bid-row .bid-value {
+    padding: 10px 14px;
+    font-size: 12px;
+    font-weight: 600;
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+  }
+
+  .bid-row .btn {
+    padding: 12px 16px;
+    font-size: 13px;
+    font-weight: 600;
+    min-height: 44px;
+    border-radius: 8px;
+    transition: all 0.2s ease;
+  }
+
+  .bid-row .btn:active {
+    transform: scale(0.98);
   }
 
   #game-table {
-    border-width: 3px;
+    border-width: 2px;
+    border-radius: 16px;
   }
 
   .my-hand {
-    padding: 8px 10px;
-    gap: 3px;
+    padding: 10px 12px;
+    gap: 5px;
+    justify-content: center;
   }
 }
 
@@ -1901,6 +2211,7 @@ body.panel-dragging * {
    ============================================================ */
 
 @media (max-width: 600px) {
+
   /* Phone top HUD background */
   #mobile-top-panel {
     display: block;
@@ -1908,7 +2219,7 @@ body.panel-dragging * {
     left: 0;
     right: 0;
     top: 0;
-    height: calc(env(safe-area-inset-top, 0px) + 156px);
+    height: calc(env(safe-area-inset-top, 0px) + 160px);
     z-index: 8;
     pointer-events: none;
   }
@@ -1917,35 +2228,39 @@ body.panel-dragging * {
     content: '';
     position: absolute;
     inset: 0;
-    background: var(--bg-card-panel);
-    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
-    backdrop-filter: blur(10px);
+    background: linear-gradient(to bottom, rgba(20, 20, 40, 0.95), rgba(15, 15, 35, 0.85));
+    border-bottom: 1px solid rgba(212, 168, 67, 0.1);
+    backdrop-filter: blur(12px);
   }
 
   /* Reposition the existing HUD elements into the top area (no DOM duplication). */
   #scoreboard {
-    top: calc(env(safe-area-inset-top, 0px) + 10px);
+    top: calc(env(safe-area-inset-top, 0px) + 12px);
     left: 10px;
     transform: none;
     flex-direction: column;
     align-items: flex-start;
-    gap: 8px;
-    padding: 10px 14px;
-    font-size: 16px;
+    gap: 6px;
+    padding: 8px 12px;
+    font-size: 14px;
+    font-weight: 600;
     z-index: 10;
   }
 
   /* Round points (current hand) anchored under the match scoreboard */
   #round-points {
-    top: calc(env(safe-area-inset-top, 0px) + 92px);
+    top: calc(env(safe-area-inset-top, 0px) + 80px);
     left: 10px;
     bottom: auto;
     right: auto;
     transform: none;
-    padding: 8px 12px;
-    font-size: 12px;
-    gap: 12px;
+    padding: 8px 10px;
+    font-size: 11px;
+    gap: 10px;
     z-index: 10;
+    background: rgba(0, 0, 0, 0.25);
+    border-radius: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.05);
   }
 
   .score-separator {
@@ -1953,31 +2268,42 @@ body.panel-dragging * {
   }
 
   #contract-info {
-    top: calc(env(safe-area-inset-top, 0px) + 10px);
+    top: calc(env(safe-area-inset-top, 0px) + 70px);
     left: 50%;
     transform: translateX(-50%);
     z-index: 10;
-    max-width: min(60vw, 360px);
+    max-width: min(85vw, 380px);
     text-align: center;
+    background: rgba(0, 0, 0, 0.35);
+    padding: 10px 14px;
+    border-radius: 10px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    font-size: 12px;
+    font-weight: 600;
+    backdrop-filter: blur(8px);
   }
 
   .table-side-panel {
     position: fixed;
-    top: calc(env(safe-area-inset-top, 0px) + 10px);
+    top: calc(env(safe-area-inset-top, 0px) + 12px);
     right: 10px;
     left: auto;
-    width: 190px;
+    width: auto;
+    max-width: 200px;
     z-index: 10;
   }
 
   /* Table play area should start below the top HUD */
   .table-layout {
-    padding-top: calc(env(safe-area-inset-top, 0px) + 176px);
+    padding-top: calc(env(safe-area-inset-top, 0px) + 180px);
   }
 
   /* Keep last trick compact in the phone top HUD */
   .last-trick-panel {
-    padding: 6px 8px;
+    padding: 8px 10px;
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.05);
   }
 
   .last-trick-area {
@@ -1996,7 +2322,11 @@ body.panel-dragging * {
     align-items: center;
     justify-content: space-between;
     gap: 8px;
-    margin-bottom: 0;
+    margin-bottom: 4px;
+    font-size: 11px;
+    font-weight: 700;
+    cursor: pointer;
+    user-select: none;
   }
 
   .last-trick-title::after {
@@ -2075,7 +2405,7 @@ body.panel-dragging * {
     pointer-events: none;
   }
 
-  #chat-panel > * {
+  #chat-panel>* {
     position: relative;
     z-index: 1;
   }
@@ -2110,6 +2440,7 @@ body.panel-dragging * {
    ============================================================ */
 
 @media (max-width: 600px) and (orientation: portrait) {
+
   /* Do not display other players' hands (card backs). */
   #hand-nord,
   #hand-est,
@@ -2142,6 +2473,18 @@ body.panel-dragging * {
   .player-west .player-info,
   .player-east .player-info {
     margin-bottom: 0;
+    font-size: 12px;
+    gap: 4px;
+  }
+
+  .player-info .player-name {
+    font-weight: 700;
+    font-size: 12px;
+  }
+
+  .card-count {
+    font-size: 10px;
+    opacity: 0.8;
   }
 
   /* Move overlays above the reserved hand area (avoid covering cards). */
@@ -2165,10 +2508,23 @@ body.panel-dragging * {
     top: 50%;
     right: auto;
     bottom: auto;
-    width: min(92vw, 320px);
+    width: min(90vw, 340px);
     transform: translate(-50%, -50%);
-    max-height: calc(100vh - 300px);
-    border-radius: var(--radius-lg);
+    max-height: calc(100vh - 320px);
+    border-radius: 12px;
+    padding: 16px 14px;
+  }
+
+  #bidding-panel h3 {
+    font-size: 15px;
+    margin-bottom: 12px;
+    font-weight: 700;
+  }
+
+  .bid-row .btn {
+    min-height: 40px;
+    border-radius: 8px;
+    font-weight: 600;
   }
 }
 
@@ -2179,6 +2535,7 @@ body.panel-dragging * {
    ============================================================ */
 
 @media (max-width: 600px) and (prefers-color-scheme: dark) {
+
   /* Opt into dark color-scheme only for the lobby (the game stays in light scheme). */
   #lobby {
     color-scheme: dark;
@@ -2272,6 +2629,7 @@ body.panel-dragging * {
 }
 
 @media (forced-colors: active) {
+
   #game-table,
   #game-table * {
     forced-color-adjust: none;

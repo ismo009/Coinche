@@ -21,7 +21,8 @@
     <div class="lobby-container">
       <img class="brand-logo brand-logo-lobby" src="/logo/logo.png" alt="Logo Cari'Coinche" loading="eager"
         decoding="async">
-      <h1 class="subtitle">♠ Jeu de cartes multijoueur♥</h1>
+      <h1 class="lobby-title">♠ Jeu de cartes multijoueur♥</h1>
+      <p class="subtitle">Coinche en ligne, 4 joueurs, parties privées et publiques</p>
 
       <div class="lobby-form">
         <input type="text" id="player-name" placeholder="Ton pseudo" maxlength="20" autocomplete="off">
@@ -53,9 +54,26 @@
             <button id="btn-join" class="btn btn-secondary">Rejoindre</button>
           </div>
         </div>
+
+        <div class="public-menu">
+          <h3>Parties publiques</h3>
+          <p class="public-menu-help">Crée une salle publique ou rejoins-en une si une place est disponible.</p>
+          <div class="public-menu-actions">
+            <button id="btn-public-create" class="btn btn-primary">Créer une salle publique</button>
+            <button id="btn-public-join" class="btn btn-secondary">Voir les salles publiques</button>
+          </div>
+          <div class="public-rooms-panel">
+            <div class="public-rooms-header">
+              <span>Salles disponibles</span>
+              <button id="btn-public-refresh" class="btn btn-secondary btn-sm" type="button">Rafraîchir</button>
+            </div>
+            <div id="public-rooms-list" class="public-rooms-list"></div>
+          </div>
+        </div>
       </div>
 
       <div id="lobby-error" class="error-msg hidden"></div>
+      <p class="lobby-made-by">Fait par vos membres du City Bar préféré, Zac et Isma 🧡 4A ICy</p>
     </div>
   </div>
 
@@ -65,7 +83,7 @@
       <img class="brand-logo brand-logo-waiting" src="/logo/logo.png" alt="Logo Cari'Coinche" loading="lazy"
         decoding="async">
       <h2>Salle: <span id="room-code-display"></span></h2>
-      <p>Partagez ce code avec vos amis !</p>
+      <p id="waiting-room-help">Partagez ce code de salle avec vos amis !</p>
       <div class="players-grid">
         <div class="player-slot" id="slot-nord">
           <div class="slot-label">Nord</div>
@@ -87,6 +105,10 @@
       <p class="team-info">
         <span class="team-ns">Nord ↔ Sud</span> vs <span class="team-eo">Ouest ↔ Est</span>
       </p>
+
+      <div class="waiting-actions">
+        <button id="btn-add-bot" class="btn btn-secondary" type="button">Ajouter une IA</button>
+      </div>
     </div>
   </div>
 
@@ -190,7 +212,8 @@
     <div id="chat-panel" aria-label="Chat de la partie">
       <div class="chat-header">
         <span>Chat</span>
-        <button id="btn-chat-close" class="btn btn-secondary btn-sm chat-close-btn" type="button" aria-label="Réduire le chat">Réduire</button>
+        <button id="btn-chat-close" class="btn btn-secondary btn-sm chat-close-btn" type="button"
+          aria-label="Réduire le chat">Réduire</button>
       </div>
       <div id="chat-messages" class="chat-messages"></div>
       <div class="chat-input-row">
@@ -200,7 +223,8 @@
     </div>
 
     <!-- Mobile: bouton d'ouverture du chat -->
-    <button id="btn-chat-open" class="btn btn-secondary btn-sm chat-open-btn" type="button" aria-label="Ouvrir le chat">Chat</button>
+    <button id="btn-chat-open" class="btn btn-secondary btn-sm chat-open-btn" type="button"
+      aria-label="Ouvrir le chat">Chat</button>
 
     <!-- Zone d'enchères -->
     <div id="bidding-panel" class="hidden">

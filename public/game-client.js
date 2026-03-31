@@ -8,6 +8,8 @@ const socket = io();
 let myPosition = null;
 let myRoom = null;
 let gameState = null;
+let isRoomOwner = false;
+let addBotWarningShown = false;
 
 // Trick collect animation (UX): wait 0.2s then slide cards to trick winner.
 const TRICK_COLLECT_DELAY_MS = 200;
@@ -49,8 +51,14 @@ const chatUi = {
   closeBtn: document.getElementById('btn-chat-close')
 };
 
+const publicRoomsUi = {
+  list: document.getElementById('public-rooms-list'),
+  refreshBtn: document.getElementById('btn-public-refresh')
+};
+
 const CHAT_MAX_MESSAGES = 120;
 const PANEL_POS_STORAGE_PREFIX = 'coinche-panel-pos:';
+const PUBLIC_ROOMS_REFRESH_MS = 10000;
 
 function isMobilePortraitGameplay() {
   // Matches the CSS breakpoint used for portrait-phone gameplay overrides.
@@ -97,6 +105,45 @@ function initMobileChatToggle() {
 
   // Prevent the close button from acting as a drag handle on desktop.
   chatUi.closeBtn.addEventListener('mousedown', (e) => {
+
+function initDesktopChatCollapse() {
+  if (!chatUi.panel || !chatUi.openBtn || !chatUi.closeBtn) return;
+
+  const setCollapsed = (collapsed) => {
+    document.body.classList.toggle('chat-collapsed', !!collapsed);
+    try {
+      localStorage.setItem('coinche:chat-collapsed', collapsed ? '1' : '0');
+    } catch {
+      // ignore
+    }
+  };
+
+  // Only apply on desktop/tablet layouts.
+  if (isPhoneUi()) {
+    setCollapsed(false);
+    return;
+  }
+
+  // Restore
+  try {
+    const saved = localStorage.getItem('coinche:chat-collapsed');
+    if (saved === '1') setCollapsed(true);
+  } catch {
+    // ignore
+  }
+
+  chatUi.closeBtn.addEventListener('click', () => {
+    if (isPhoneUi()) return;
+    setCollapsed(true);
+  });
+
+  chatUi.openBtn.addEventListener('click', () => {
+    if (isPhoneUi()) return;
+    setCollapsed(false);
+  });
+}
+
+initDesktopChatCollapse();
     e.stopPropagation();
   });
 
@@ -884,6 +931,20 @@ document.getElementById('btn-create').addEventListener('click', () => {
   socket.emit('create-room', { name, position });
 });
 
+const addBotBtn = document.getElementById('btn-add-bot');
+if (addBotBtn) {
+  addBotBtn.addEventListener('click', () => {
+    if (!addBotWarningShown) {
+      const ok = window.confirm(
+        'Ajouter une IA ?\n\n⚠️ Attention : les IA sont encore en béta, elles ont un niveau acceptable, mais restent peu ouf en Sans Atouts/Tout Atouts.'
+      );
+      if (!ok) return;
+      addBotWarningShown = true;
+    }
+    socket.emit('add-bot', { name: 'IA' });
+  });
+}
+
 document.getElementById('btn-join').addEventListener('click', () => {
   const name = document.getElementById('player-name').value.trim() || 'Joueur';
   const roomId = document.getElementById('room-code').value.trim();
@@ -901,6 +962,36 @@ document.getElementById('btn-join').addEventListener('click', () => {
   socket.emit('join-room', { name, roomId, position });
 });
 
+const publicCreateBtn = document.getElementById('btn-public-create');
+if (publicCreateBtn) {
+  publicCreateBtn.addEventListener('click', () => {
+    const name = document.getElementById('player-name').value.trim() || 'Joueur';
+    socket.emit('create-public-room', { name });
+  });
+}
+
+const publicJoinBtn = document.getElementById('btn-public-join');
+if (publicJoinBtn) {
+  publicJoinBtn.addEventListener('click', () => {
+    requestPublicRooms();
+  });
+}
+
+if (publicRoomsUi.refreshBtn) {
+  publicRoomsUi.refreshBtn.addEventListener('click', () => {
+    requestPublicRooms();
+  });
+}
+
+const quickPlayBtn = document.getElementById('btn-quick-play');
+if (quickPlayBtn) {
+  // Compatibilite si l'ancien bouton est encore present
+  quickPlayBtn.addEventListener('click', () => {
+    const name = document.getElementById('player-name').value.trim() || 'Joueur';
+    socket.emit('join-public-room', { name });
+  });
+}
+
 // Update available positions when typing room code
 document.getElementById('room-code').addEventListener('input', (e) => {
   const code = e.target.value.trim();
@@ -908,6 +999,65 @@ document.getElementById('room-code').addEventListener('input', (e) => {
     socket.emit('get-available-positions', { roomId: code });
   }
 });
+
+function requestPublicRooms() {
+  socket.emit('list-public-rooms');
+}
+
+function renderPublicRooms(rooms) {
+  if (!publicRoomsUi.list) return;
+
+  publicRoomsUi.list.innerHTML = '';
+
+  if (!Array.isArray(rooms) || rooms.length === 0) {
+    publicRoomsUi.list.innerHTML = '<div class="public-rooms-empty">Aucune salle publique disponible pour le moment.</div>';
+    return;
+  }
+
+  for (const room of rooms) {
+    const row = document.createElement('div');
+    row.className = 'public-room-entry';
+
+    const meta = document.createElement('div');
+    meta.className = 'public-room-meta';
+    meta.innerHTML = `
+      <div class="public-room-title">${room.roomName || room.displayCode || room.roomId}</div>
+      <div class="public-room-subtitle">${room.playerCount}/4 joueurs · ${room.freeSeats} place(s) libre(s)</div>
+    `;
+
+    const joinBtn = document.createElement('button');
+    joinBtn.className = 'btn btn-secondary btn-sm';
+    joinBtn.type = 'button';
+    joinBtn.textContent = 'Rejoindre';
+    joinBtn.addEventListener('click', () => {
+      const name = document.getElementById('player-name').value.trim() || 'Joueur';
+      socket.emit('join-public-room', { name, roomId: room.roomId });
+    });
+
+    row.appendChild(meta);
+    row.appendChild(joinBtn);
+    publicRoomsUi.list.appendChild(row);
+  }
+}
+
+socket.on('public-rooms', (data) => {
+  renderPublicRooms(data?.rooms || []);
+});
+
+socket.on('public-room-closed', () => {
+  myRoom = null;
+  myPosition = null;
+  gameState = null;
+  showScreen('lobby');
+  requestPublicRooms();
+});
+
+setInterval(() => {
+  if (!screens?.lobby || screens.lobby.classList.contains('hidden')) return;
+  requestPublicRooms();
+}, PUBLIC_ROOMS_REFRESH_MS);
+
+requestPublicRooms();
 
 socket.on('available-positions', (data) => {
   const select = document.getElementById('join-position');
@@ -931,20 +1081,78 @@ function showError(msg) {
   setTimeout(() => el.classList.add('hidden'), 3000);
 }
 
+function updateWaitingRoomRoomInfo(data) {
+  const display = document.getElementById('room-code-display');
+  const help = document.getElementById('waiting-room-help');
+  const isPublic = !!data?.isPublic;
+
+  if (display) {
+    display.textContent = isPublic
+      ? (data.roomName || data.displayCode || data.roomId || '')
+      : (data.displayCode || data.roomId || '');
+  }
+
+  if (help) {
+    help.textContent = isPublic
+      ? 'Partagez ce nom de salle avec vos amis !'
+      : 'Partagez ce code de salle avec vos amis !';
+  }
+}
+
+function getPrivateLobbyCodeFromRoomEvent(data) {
+  if (!data) return null;
+  if (data.isPublic) return null;
+  const code = (data.displayCode || data.roomId || '').toString().trim().toUpperCase();
+  if (!code) return null;
+  // Private room codes are 6 characters (generated by server). Keep it flexible but bounded.
+  return code.slice(0, 12);
+}
+
+function ensurePrivateLobbyCodeFirstChatMessage(data) {
+  const code = getPrivateLobbyCodeFromRoomEvent(data);
+  if (!code) return;
+  if (!chatElements.container) return;
+
+  const row = document.createElement('div');
+  row.className = 'chat-msg system';
+
+  const author = document.createElement('div');
+  author.className = 'chat-author';
+  author.textContent = 'Lobby';
+
+  const body = document.createElement('div');
+  body.className = 'chat-text';
+  body.textContent = `Code de la partie privée : ${code}`;
+
+  row.appendChild(author);
+  row.appendChild(body);
+
+  // Insert as the very first message.
+  chatElements.container.insertBefore(row, chatElements.container.firstChild);
+  while (chatElements.container.children.length > CHAT_MAX_MESSAGES) {
+    chatElements.container.removeChild(chatElements.container.lastChild);
+  }
+  chatElements.container.scrollTop = chatElements.container.scrollHeight;
+}
+
 // ---- Socket events ----
 socket.on('room-created', (data) => {
   myRoom = data.roomId;
   myPosition = data.position;
-  document.getElementById('room-code-display').textContent = data.roomId;
+  isRoomOwner = true;
+  updateWaitingRoomRoomInfo(data);
   clearChat();
+  ensurePrivateLobbyCodeFirstChatMessage(data);
   showScreen('waiting');
 });
 
 socket.on('room-joined', (data) => {
   myRoom = data.roomId;
   myPosition = data.position;
-  document.getElementById('room-code-display').textContent = data.roomId;
+  isRoomOwner = false;
+  updateWaitingRoomRoomInfo(data);
   clearChat();
+  ensurePrivateLobbyCodeFirstChatMessage(data);
   showScreen('waiting');
 });
 
@@ -1037,11 +1245,18 @@ function updateDisplay() {
 
 function updateWaitingRoom() {
   const posNames = { sud: 'Sud', nord: 'Nord', est: 'Est', ouest: 'Ouest' };
+
+  const addBotBtn = document.getElementById('btn-add-bot');
+  if (addBotBtn) {
+    const canAddBot = isRoomOwner && gameState?.state === 'waiting';
+    addBotBtn.classList.toggle('hidden', !canAddBot);
+  }
+
   for (const pos of ['sud', 'nord', 'est', 'ouest']) {
     const slot = document.getElementById(`slot-${pos}`);
     const nameEl = slot.querySelector('.slot-name');
     if (gameState.players[pos]) {
-      nameEl.textContent = gameState.players[pos].name;
+      nameEl.textContent = `${gameState.players[pos].name} (${posNames[pos] || pos})`;
       slot.classList.add('occupied');
     } else {
       nameEl.textContent = 'En attente...';
@@ -1058,6 +1273,7 @@ function updateScoreboard() {
 function updatePlayers() {
   const absToVisual = getAbsToVisual();
   const positions = ['sud', 'ouest', 'nord', 'est'];
+  const posNames = { sud: 'Sud', nord: 'Nord', est: 'Est', ouest: 'Ouest' };
 
   for (const absPos of positions) {
     const visualPos = absToVisual[absPos];
@@ -1067,10 +1283,11 @@ function updatePlayers() {
     const infoEl = nameEl ? nameEl.parentElement : null;
 
     if (gameState.players[absPos]) {
-      const name = absPos === myPosition
+      const baseName = absPos === myPosition
         ? `${gameState.players[absPos].name} (moi)`
         : gameState.players[absPos].name;
-      if (nameEl) nameEl.textContent = name;
+      const withPosition = `${baseName} - ${posNames[absPos] || absPos}`;
+      if (nameEl) nameEl.textContent = withPosition;
     }
 
     if (cardsEl) {
@@ -1088,6 +1305,107 @@ function updatePlayers() {
       infoEl.classList.toggle('dealer', gameState.dealer === absPos);
     }
   }
+}
+
+function getBidLogoUrlForSuit(suit) {
+  // Dedicated suit icons (transparent PNG) stored under /public/logo.
+  const suitMap = {
+    coeur: 'COEUR.png',
+    carreau: 'CARREAU.png',
+    trefle: 'TREFLE.png',
+    pique: 'PIC.png',
+    'tout-atout': 'TA.png',
+    'sans-atout': 'SA.png'
+  };
+  const file = suitMap[suit];
+  if (!file) return null;
+  return `/logo/${file}`;
+}
+
+function ensureBidBubbleEl(playerAreaEl) {
+  if (!playerAreaEl) return null;
+  let el = playerAreaEl.querySelector('.bid-bubble');
+  if (el) return el;
+  el = document.createElement('div');
+  el.className = 'bid-bubble hidden';
+  el.innerHTML = `
+    <div class="bid-bubble__inner">
+      <img class="bid-bubble__logo" alt="" />
+      <span class="bid-bubble__points"></span>
+    </div>
+  `;
+  // Prefer anchoring to the info header so placement is consistent across orientations.
+  const info = playerAreaEl.querySelector('.player-info');
+  (info || playerAreaEl).appendChild(el);
+  return el;
+}
+
+function updateBidBubbles() {
+  // Temporarily disable bubbles on mobile UI.
+  if (isPhoneUi()) {
+    hideAllBidBubbles();
+    return;
+  }
+
+  const absToVisual = getAbsToVisual();
+  const positions = ['sud', 'ouest', 'nord', 'est'];
+
+  // Gather latest bid per player (only actual bids with points).
+  const latestByPlayer = {};
+  if (gameState && Array.isArray(gameState.bids)) {
+    for (const b of gameState.bids) {
+      if (b && b.type === 'bid' && typeof b.points === 'number' && b.suit) {
+        latestByPlayer[b.player] = b;
+      }
+    }
+  }
+
+  for (const absPos of positions) {
+    const visualPos = absToVisual[absPos];
+    // DOM uses english seat classes: .player-north/.player-south/.player-east/.player-west
+    const seatClass = {
+      sud: 'south',
+      nord: 'north',
+      est: 'east',
+      ouest: 'west'
+    }[visualPos] || visualPos;
+
+    const playerArea = document.querySelector(`.player-area.player-${seatClass}`);
+    const bubble = ensureBidBubbleEl(playerArea);
+    if (!bubble) continue;
+
+    if (!gameState || gameState.state !== 'bidding') {
+      bubble.classList.add('hidden');
+      continue;
+    }
+
+    const bid = latestByPlayer[absPos];
+    if (!bid) {
+      bubble.classList.add('hidden');
+      continue;
+    }
+
+    const logoUrl = getBidLogoUrlForSuit(bid.suit);
+    const img = bubble.querySelector('.bid-bubble__logo');
+    const pointsEl = bubble.querySelector('.bid-bubble__points');
+
+    if (img) {
+      if (logoUrl) {
+        img.src = logoUrl;
+        img.classList.remove('hidden');
+      } else {
+        img.removeAttribute('src');
+        img.classList.add('hidden');
+      }
+    }
+    if (pointsEl) pointsEl.textContent = String(bid.points);
+
+    bubble.classList.remove('hidden');
+  }
+}
+
+function hideAllBidBubbles() {
+  document.querySelectorAll('.bid-bubble').forEach((el) => el.classList.add('hidden'));
 }
 
 function updateTrick() {
@@ -1198,6 +1516,7 @@ function updateBidding() {
 
   if (gameState.state !== 'bidding') {
     panel.classList.add('hidden');
+    hideAllBidBubbles();
     return;
   }
 
@@ -1276,6 +1595,9 @@ function updateBidding() {
   } else {
     pointsSelect.value = '80';
   }
+
+  // Per-player visual bubbles above each seat during bidding.
+  updateBidBubbles();
 }
 
 function getTeamFromPos(pos) {
