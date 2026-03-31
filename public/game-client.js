@@ -1256,7 +1256,7 @@ function updateWaitingRoom() {
     const slot = document.getElementById(`slot-${pos}`);
     const nameEl = slot.querySelector('.slot-name');
     if (gameState.players[pos]) {
-      nameEl.textContent = gameState.players[pos].name;
+      nameEl.textContent = `${gameState.players[pos].name} (${posNames[pos] || pos})`;
       slot.classList.add('occupied');
     } else {
       nameEl.textContent = 'En attente...';
@@ -1273,6 +1273,7 @@ function updateScoreboard() {
 function updatePlayers() {
   const absToVisual = getAbsToVisual();
   const positions = ['sud', 'ouest', 'nord', 'est'];
+  const posNames = { sud: 'Sud', nord: 'Nord', est: 'Est', ouest: 'Ouest' };
 
   for (const absPos of positions) {
     const visualPos = absToVisual[absPos];
@@ -1282,10 +1283,11 @@ function updatePlayers() {
     const infoEl = nameEl ? nameEl.parentElement : null;
 
     if (gameState.players[absPos]) {
-      const name = absPos === myPosition
+      const baseName = absPos === myPosition
         ? `${gameState.players[absPos].name} (moi)`
         : gameState.players[absPos].name;
-      if (nameEl) nameEl.textContent = name;
+      const withPosition = `${baseName} - ${posNames[absPos] || absPos}`;
+      if (nameEl) nameEl.textContent = withPosition;
     }
 
     if (cardsEl) {

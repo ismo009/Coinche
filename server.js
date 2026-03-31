@@ -58,13 +58,6 @@ function broadcastMessage(roomId, message, type = 'info') {
   io.to(roomId).emit('message', { text: message, type });
 }
 
-function formatBidPoints(points) {
-  if (points === 270) return 'Capot beloté (270)';
-  if (points === 250) return 'Capot (250)';
-  if (points === 500) return 'Générale (500)';
-  return `${points}`;
-}
-
 function getAvailablePositions(game) {
   return POSITIONS.filter(pos => !game.players[pos]);
 }
@@ -101,27 +94,15 @@ function maybeProcessBotTurn(roomId) {
       const result = latest.placeBid(pos, bid);
       if (result?.success) {
         const botName = p.name || 'IA';
-        const suitNames = {
-          'coeur': '♥ Coeur', 'carreau': '♦ Carreau', 'trefle': '♣ Trèfle',
-          'pique': '♠ Pique', 'tout-atout': 'Tout Atout', 'sans-atout': 'Sans Atout'
-        };
-        if (bid.type === 'pass') {
-          broadcastMessage(roomId, `${botName} passe`);
-        } else if (bid.type === 'bid') {
-          broadcastMessage(roomId, `${botName} annonce ${formatBidPoints(bid.points)} ${suitNames[bid.suit] || bid.suit}`);
+        if (bid.type === 'coinche') {
+          broadcastMessage(roomId, `${botName} COINCHE !`, 'warning');
+        } else if (bid.type === 'surcoinche') {
+          broadcastMessage(roomId, `${botName} SURCOINCHE !`, 'danger');
         }
 
         if (result.action === 'redistribute') {
+          broadcastMessage(roomId, 'Tout le monde passe. Redistribution des cartes.', 'info');
           latest.startNewRound();
-          broadcastMessage(roomId, 'Tout le monde a passé - redistribution !', 'warning');
-        }
-
-        if (result.action === 'play') {
-          const suitName = suitNames[latest.contract.suit] || latest.contract.suit;
-          let msg = `Contrat: ${formatBidPoints(latest.contract.points)} ${suitName} par ${latest.players[latest.contract.player].name}`;
-          if (latest.contract.coinched) msg += ' (COINCHÉ)';
-          if (latest.contract.surcoinched) msg += ' (SURCOINCÉ)';
-          broadcastMessage(roomId, msg, 'success');
         }
 
         broadcastGameState(roomId);
@@ -139,15 +120,9 @@ function maybeProcessBotTurn(roomId) {
       if (!result?.success) return;
 
       const botName = p.name || 'IA';
-      broadcastMessage(roomId, `${botName} joue ${card.rank} de ${card.suit}`);
 
       if (result.beloteAnnounce) {
         broadcastMessage(roomId, `${botName}: ${result.beloteAnnounce} !`, 'success');
-      }
-
-      if (result.action === 'trick_complete') {
-        const winnerName = latest.players[result.winner].name;
-        broadcastMessage(roomId, `${winnerName} remporte le pli (+${result.points} pts)`);
       }
 
       if (result.action === 'round_end' || result.action === 'game_over') {
@@ -453,32 +428,15 @@ io.on('connection', (socket) => {
       return;
     }
 
-    const suitNames = {
-      'coeur': '♥ Coeur', 'carreau': '♦ Carreau', 'trefle': '♣ Trèfle',
-      'pique': '♠ Pique', 'tout-atout': 'Tout Atout', 'sans-atout': 'Sans Atout'
-    };
-
-    if (data.type === 'pass') {
-      broadcastMessage(currentRoom, `${playerName} passe`);
-    } else if (data.type === 'coinche') {
+    if (data.type === 'coinche') {
       broadcastMessage(currentRoom, `${playerName} COINCHE !`, 'warning');
     } else if (data.type === 'surcoinche') {
       broadcastMessage(currentRoom, `${playerName} SURCOINCHE !`, 'danger');
-    } else if (data.type === 'bid') {
-      broadcastMessage(currentRoom, `${playerName} annonce ${formatBidPoints(data.points)} ${suitNames[data.suit] || data.suit}`);
     }
 
     if (result.action === 'redistribute') {
+      broadcastMessage(currentRoom, 'Tout le monde passe. Redistribution des cartes.', 'info');
       game.startNewRound();
-      broadcastMessage(currentRoom, 'Tout le monde a passé - redistribution !', 'warning');
-    }
-
-    if (result.action === 'play') {
-      const suitName = suitNames[game.contract.suit] || game.contract.suit;
-      let msg = `Contrat: ${formatBidPoints(game.contract.points)} ${suitName} par ${game.players[game.contract.player].name}`;
-      if (game.contract.coinched) msg += ' (COINCHÉ)';
-      if (game.contract.surcoinched) msg += ' (SURCOINCÉ)';
-      broadcastMessage(currentRoom, msg, 'success');
     }
 
     broadcastGameState(currentRoom);
@@ -503,11 +461,6 @@ io.on('connection', (socket) => {
 
     if (result.beloteAnnounce) {
       broadcastMessage(currentRoom, `${playerName}: ${result.beloteAnnounce} !`, 'success');
-    }
-
-    if (result.action === 'trick_complete') {
-      const winnerName = game.players[result.winner].name;
-      broadcastMessage(currentRoom, `${winnerName} remporte le pli (+${result.points} pts)`);
     }
 
     if (result.action === 'round_end' || result.action === 'game_over') {
