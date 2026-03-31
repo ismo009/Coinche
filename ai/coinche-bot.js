@@ -883,6 +883,28 @@ function chooseCard(game, position) {
     isLeadingNewTrick &&
     iAmDefense;
 
+  const trickBeforeSelect = Array.isArray(game.currentTrick) ? game.currentTrick : [];
+  const winnerBeforeSelect = trickBeforeSelect.length > 0
+    ? determineCurrentWinnerEntry(trickBeforeSelect, trumpSuit)
+    : null;
+  const ledSuitBeforeSelect = trickBeforeSelect.length > 0 ? trickBeforeSelect[0].card.suit : null;
+  const partnerCurrentlyMasterBeforeSelect =
+    !!winnerBeforeSelect && !!partnerPos && winnerBeforeSelect.winner.player === partnerPos;
+  const partnerMasterByCutBeforeSelect =
+    !!winnerBeforeSelect &&
+    isSuitTrumpContract &&
+    !!ledSuitBeforeSelect &&
+    ledSuitBeforeSelect !== trumpSuit &&
+    winnerBeforeSelect.winner.card.suit === trumpSuit;
+  const hasNonTrumpAlternativeBeforeSelect =
+    isSuitTrumpContract &&
+    playable.some(c => c.suit !== trumpSuit);
+  const shouldDiscardWhenPartnerMaster =
+    isSuitTrumpContract &&
+    !isLeadingNewTrick &&
+    partnerCurrentlyMasterBeforeSelect &&
+    hasNonTrumpAlternativeBeforeSelect;
+
   const fullDeck = buildDeck();
   const knownCards = [...hand, ...alreadyPlayed];
   const unknownCards = removeCardsFromDeck(fullDeck, knownCards);
@@ -974,6 +996,15 @@ function chooseCard(game, position) {
     const isOffTrumpAce = isSuitTrumpContract && card.rank === 'as' && card.suit !== trumpSuit;
     const discardingOnDifferentSuit = !!ledSuitNow && card.suit !== ledSuitNow;
     const partnerCurrentlyMaster = !!winnerBeforePlay && !!partnerPos && winnerBeforePlay.winner.player === partnerPos;
+    const partnerMasterByCut =
+      !!winnerBeforePlay &&
+      isSuitTrumpContract &&
+      !!ledSuitNow &&
+      ledSuitNow !== trumpSuit &&
+      winnerBeforePlay.winner.card.suit === trumpSuit;
+    const hasNonTrumpAlternativeNow =
+      isSuitTrumpContract &&
+      playable.some(c => c.suit !== trumpSuit);
     const asAlreadyPlayedInSuit = alreadyPlayed.some(c => c.suit === card.suit && c.rank === 'as');
     const tenAlreadyPlayedInSuit = alreadyPlayed.some(c => c.suit === card.suit && c.rank === '10');
     const likelyMasterAce = isOffTrumpAce && !asAlreadyPlayedInSuit;
@@ -1056,6 +1087,30 @@ function chooseCard(game, position) {
       if (partnerCurrentlyMaster) {
         defenseTrumpConservationPenalty += 8;
       }
+    }
+
+    // Requested behavior:
+    // - if partner is master, do not spend trump when a discard is legal.
+    // - if partner is master by cut, avoid trump even more and prefer creating future cuts.
+    let partnerMasterTrumpWastePenalty = 0;
+    if (isSuitTrumpContract && partnerCurrentlyMaster && hasNonTrumpAlternativeNow && card.suit === trumpSuit) {
+      partnerMasterTrumpWastePenalty = partnerMasterByCut ? 52 : 36;
+    }
+
+    let createFutureCutBonus = 0;
+    if (isSuitTrumpContract && partnerCurrentlyMaster && hasNonTrumpAlternativeNow && card.suit !== trumpSuit) {
+      const countInSuitBeforePlay = hand.filter(c => c.suit === card.suit).length;
+
+      // Prefer discards that empty/shorten a suit to create future cuts.
+      if (countInSuitBeforePlay === 1) createFutureCutBonus += 16;
+      else if (countInSuitBeforePlay === 2) createFutureCutBonus += 9;
+      else if (countInSuitBeforePlay === 3) createFutureCutBonus += 4;
+
+      if (partnerMasterByCut) createFutureCutBonus += 6;
+
+      // Do not create cuts by throwing away too many points.
+      if (card.rank === 'as') createFutureCutBonus -= 10;
+      else if (card.rank === '10') createFutureCutBonus -= 6;
     }
 
     let firstTrickTrumpPressure = 0;
@@ -1166,10 +1221,12 @@ function chooseCard(game, position) {
       utility -= masterConservationPenalty;
       utility -= secondMasterTrumpConservationPenalty;
       utility -= defenseTrumpConservationPenalty;
+      utility -= partnerMasterTrumpWastePenalty;
       utility -= emptyTrumpLeadPenalty;
       utility -= overtrumpRiskPenalty;
       utility += firstTrickTrumpPressure;
       utility += overtrumpRiskBonus;
+      utility += createFutureCutBonus;
 
       total += utility;
     }
@@ -1177,15 +1234,17 @@ function chooseCard(game, position) {
     return total / sampleCount;
   }
 
-  const candidateCards = shouldForceTrumpLeadAtFirstTrick
-    ? playable.filter(c => c.suit === trumpSuit)
-    : shouldPullTrumpsNow
+  const candidateCards = shouldDiscardWhenPartnerMaster
+    ? playable.filter(c => c.suit !== trumpSuit)
+    : shouldForceTrumpLeadAtFirstTrick
       ? playable.filter(c => c.suit === trumpSuit)
-      : shouldPreserveTrumpsForCutsAndEndgame
-        ? playable.filter(c => c.suit !== trumpSuit)
-      : shouldAvoidDefenseTrumpLead
-        ? playable.filter(c => c.suit !== trumpSuit)
-        : playable;
+      : shouldPullTrumpsNow
+        ? playable.filter(c => c.suit === trumpSuit)
+        : shouldPreserveTrumpsForCutsAndEndgame
+          ? playable.filter(c => c.suit !== trumpSuit)
+        : shouldAvoidDefenseTrumpLead
+          ? playable.filter(c => c.suit !== trumpSuit)
+          : playable;
 
   const cardsToEvaluate = candidateCards.length > 0 ? candidateCards : playable;
 
