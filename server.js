@@ -11,12 +11,16 @@ const server = http.createServer(app);
 const io = new Server(server);
 
 app.use(express.static(path.join(__dirname, 'public')));
+app.get('/lobby/:code', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
 
 // Stockage des parties en cours
 const games = new Map();
 const PUBLIC_ROOM_PREFIX = 'PUB-';
 const PUBLIC_INACTIVE_MS = 5 * 60 * 1000;
 const PUBLIC_CLEANUP_INTERVAL_MS = 30 * 1000;
+const PLAYER_RECONNECT_GRACE_MS = 2 * 60 * 1000;
 
 const ROOM_NAME_NOUNS = [
   'Table', 'Salon', 'Atout', 'Belote', 'Coinche', 'Pli', 'Trèfle', 'Carreau', 'Pique', 'Cœur'
@@ -28,6 +32,10 @@ const ROOM_NAME_ADJECTIVES = [
 
 function generateRoomCode() {
   return crypto.randomBytes(3).toString('hex').toUpperCase().slice(0, 6);
+}
+
+function generatePlayerSessionKey() {
+  return crypto.randomBytes(12).toString('hex');
 }
 
 function sanitizeRoomName(name) {
@@ -67,6 +75,40 @@ function formatBidPoints(points) {
 
 function getAvailablePositions(game) {
   return POSITIONS.filter(pos => !game.players[pos]);
+}
+
+function getRoomPayload(game, roomId, position) {
+  const isPublic = !!game.isPublic;
+  return {
+    roomId,
+    position,
+    isPublic,
+    playerName: game.players[position]?.name,
+    roomName: isPublic ? game.roomName : undefined,
+    displayCode: isPublic ? game.roomName : roomId,
+    sessionKey: game.players[position]?.sessionKey,
+    isOwner: isRoomOwner(game, game.players[position]?.id)
+  };
+}
+
+function markPlayerAsConnected(game, position, socketId) {
+  const player = game?.players?.[position];
+  if (!player) return null;
+  const previousSocketId = player.id;
+  player.id = socketId;
+  player.connected = true;
+  delete player.disconnectedAt;
+  return previousSocketId;
+}
+
+function findPlayerPositionBySessionKey(game, sessionKey) {
+  if (!game || !sessionKey) return null;
+  for (const pos of POSITIONS) {
+    const player = game.players[pos];
+    if (!player || player.isBot === true) continue;
+    if (player.sessionKey === sessionKey) return pos;
+  }
+  return null;
 }
 
 function isBotPlayer(player) {
@@ -243,13 +285,15 @@ io.on('connection', (socket) => {
       socket.emit('error-msg', { message: 'Position déjà prise' });
       return;
     }
+    game.players[position].sessionKey = generatePlayerSessionKey();
+    game.players[position].connected = true;
 
     // Owner = creator (first human).
     game.ownerId = socket.id;
 
     currentRoom = roomId;
     socket.join(roomId);
-    socket.emit('room-created', { roomId, position, isPublic: false, displayCode: roomId });
+    socket.emit('room-created', getRoomPayload(game, roomId, position));
     broadcastGameState(roomId);
     broadcastMessage(roomId, `${playerName} a créé la salle (${position})`);
     touchRoom(roomId);
@@ -281,10 +325,12 @@ io.on('connection', (socket) => {
       socket.emit('error-msg', { message: 'Position déjà prise' });
       return;
     }
+    game.players[position].sessionKey = generatePlayerSessionKey();
+    game.players[position].connected = true;
 
     currentRoom = roomId;
     socket.join(roomId);
-    socket.emit('room-joined', { roomId, position, isPublic: false, displayCode: roomId });
+    socket.emit('room-joined', getRoomPayload(game, roomId, position));
     broadcastGameState(roomId);
     broadcastMessage(roomId, `${playerName} a rejoint la salle (${position})`);
     touchRoom(roomId);
@@ -345,28 +391,18 @@ io.on('connection', (socket) => {
       socket.emit('error-msg', { message: 'Impossible de rejoindre la salle publique.' });
       return;
     }
+    game.players[position].sessionKey = generatePlayerSessionKey();
+    game.players[position].connected = true;
 
     currentRoom = roomId;
     socket.join(roomId);
 
     const createdByThisPlayer = createdByPlayer || (createIfMissing && game.players[position] && Object.keys(game.players).length === 1);
     if (createdByThisPlayer) {
-      socket.emit('room-created', {
-        roomId,
-        position,
-        isPublic: true,
-        roomName: game.roomName,
-        displayCode: game.roomName
-      });
+      socket.emit('room-created', getRoomPayload(game, roomId, position));
       broadcastMessage(roomId, `${playerName} a créé une salle publique (${position})`);
     } else {
-      socket.emit('room-joined', {
-        roomId,
-        position,
-        isPublic: true,
-        roomName: game.roomName,
-        displayCode: game.roomName
-      });
+      socket.emit('room-joined', getRoomPayload(game, roomId, position));
       broadcastMessage(roomId, `${playerName} rejoint la partie publique (${position})`);
     }
 
@@ -382,6 +418,52 @@ io.on('connection', (socket) => {
     room.game.ownerId = socket.id;
     room.game.roomName = sanitizeRoomName(data?.roomName) || room.game.roomName;
     addSocketToPublicRoom({ createIfMissing: false, preferredRoomId: room.roomId, createdByPlayer: true });
+  });
+
+  socket.on('reconnect-room', (data) => {
+    const roomId = (data?.roomId || '').toString().toUpperCase().trim();
+    const sessionKey = (data?.sessionKey || '').toString().trim();
+    if (!roomId || !sessionKey) {
+      socket.emit('reconnect-failed', { roomId });
+      socket.emit('error-msg', { message: 'Reconnexion impossible (session manquante).' });
+      return;
+    }
+
+    const game = games.get(roomId);
+    if (!game) {
+      socket.emit('reconnect-failed', { roomId });
+      socket.emit('error-msg', { message: 'Cette salle n\'existe plus.' });
+      return;
+    }
+
+    const position = findPlayerPositionBySessionKey(game, sessionKey);
+    if (!position) {
+      socket.emit('reconnect-failed', { roomId });
+      socket.emit('error-msg', { message: 'Session expirée pour cette salle.' });
+      return;
+    }
+
+    const player = game.players[position];
+    if (!player) {
+      socket.emit('reconnect-failed', { roomId });
+      socket.emit('error-msg', { message: 'Position introuvable pour la reconnexion.' });
+      return;
+    }
+
+    const previousSocketId = markPlayerAsConnected(game, position, socket.id);
+    if (game.ownerId === previousSocketId) {
+      game.ownerId = socket.id;
+    }
+
+    playerName = player.name;
+    currentRoom = roomId;
+    socket.join(roomId);
+
+    socket.emit('room-reconnected', getRoomPayload(game, roomId, position));
+    broadcastMessage(roomId, `${player.name} est reconnecté.`);
+    broadcastGameState(roomId);
+    touchRoom(roomId);
+    maybeProcessBotTurn(roomId);
   });
 
   socket.on('add-bot', (data) => {
@@ -598,31 +680,43 @@ io.on('connection', (socket) => {
     if (currentRoom) {
       const game = games.get(currentRoom);
       if (game) {
-        const pos = game.removePlayer(socket.id);
+        const pos = game.getPlayerPosition(socket.id);
         if (pos) {
-          broadcastMessage(currentRoom, `${playerName || 'Un joueur'} a quitté la salle`);
-          broadcastGameState(currentRoom);
+          const player = game.players[pos];
+          const isHumanWithSession = !!player && player.isBot !== true && typeof player.sessionKey === 'string';
 
-          // Supprimer la salle si vide (aucun joueur) OU si plus aucun humain n'est présent.
-          const hasPlayers = POSITIONS.some(p => game.players[p]);
-          const hasHumanPlayers = POSITIONS.some(p => {
-            const pl = game.players[p];
-            return !!pl && pl.isBot !== true;
-          });
+          if (isHumanWithSession) {
+            player.connected = false;
+            player.disconnectedAt = Date.now();
+            broadcastMessage(currentRoom, `${player.name || 'Un joueur'} est déconnecté (reconnexion possible).`, 'warning');
+            broadcastGameState(currentRoom);
+            touchRoom(currentRoom);
+          } else {
+            game.removePlayer(socket.id);
+            broadcastMessage(currentRoom, `${playerName || 'Un joueur'} a quitté la salle`);
+            broadcastGameState(currentRoom);
 
-          if (!hasPlayers || !hasHumanPlayers) {
-            // Inform remaining human sockets (if any) that the room is closing.
-            for (const p of POSITIONS) {
+            // Supprimer la salle si vide (aucun joueur) OU si plus aucun humain n'est présent.
+            const hasPlayers = POSITIONS.some(p => game.players[p]);
+            const hasHumanPlayers = POSITIONS.some(p => {
               const pl = game.players[p];
-              if (!pl || pl.isBot === true) continue;
-              io.to(pl.id).emit('error-msg', { message: 'Salle fermée (plus aucun joueur humain).' });
-              if (game.isPublic) {
-                io.to(pl.id).emit('public-room-closed', { roomId: currentRoom });
-              }
-            }
+              return !!pl && pl.isBot !== true;
+            });
 
-            games.delete(currentRoom);
-            console.log(`Salle ${currentRoom} supprimée (plus aucun humain)`);
+            if (!hasPlayers || !hasHumanPlayers) {
+              // Inform remaining human sockets (if any) that the room is closing.
+              for (const p of POSITIONS) {
+                const pl = game.players[p];
+                if (!pl || pl.isBot === true) continue;
+                io.to(pl.id).emit('error-msg', { message: 'Salle fermée (plus aucun joueur humain).' });
+                if (game.isPublic) {
+                  io.to(pl.id).emit('public-room-closed', { roomId: currentRoom });
+                }
+              }
+
+              games.delete(currentRoom);
+              console.log(`Salle ${currentRoom} supprimée (plus aucun humain)`);
+            }
           }
         }
       }
@@ -634,6 +728,42 @@ const PORT = process.env.PORT || 3000;
 
 setInterval(() => {
   const now = Date.now();
+
+  for (const [roomId, game] of games.entries()) {
+    for (const pos of POSITIONS) {
+      const player = game.players[pos];
+      if (!player || player.isBot === true) continue;
+      if (player.connected !== false) continue;
+      const disconnectedAt = player.disconnectedAt || now;
+      if (now - disconnectedAt < PLAYER_RECONNECT_GRACE_MS) continue;
+
+      const expiredSocketId = player.id;
+      const expiredName = player.name || 'Un joueur';
+      game.removePlayer(expiredSocketId);
+      broadcastMessage(roomId, `${expiredName} a quitté la salle (reconnexion expirée).`, 'warning');
+      broadcastGameState(roomId);
+    }
+
+    const hasPlayers = POSITIONS.some(p => game.players[p]);
+    const hasHumanPlayers = POSITIONS.some(p => {
+      const pl = game.players[p];
+      return !!pl && pl.isBot !== true;
+    });
+    if (!hasPlayers || !hasHumanPlayers) {
+      for (const p of POSITIONS) {
+        const pl = game.players[p];
+        if (!pl || pl.isBot === true) continue;
+        io.to(pl.id).emit('error-msg', { message: 'Salle fermée (plus aucun joueur humain).' });
+        if (game.isPublic) {
+          io.to(pl.id).emit('public-room-closed', { roomId });
+        }
+      }
+      games.delete(roomId);
+      console.log(`Salle ${roomId} supprimée (plus aucun humain)`);
+      continue;
+    }
+  }
+
   for (const [roomId, game] of games.entries()) {
     if (!game.isPublic) continue;
     if (game.state !== 'waiting') continue;

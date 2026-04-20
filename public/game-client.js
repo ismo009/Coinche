@@ -59,6 +59,9 @@ const publicRoomsUi = {
 const CHAT_MAX_MESSAGES = 120;
 const PANEL_POS_STORAGE_PREFIX = 'coinche-panel-pos:';
 const PUBLIC_ROOMS_REFRESH_MS = 10000;
+const LOBBY_SESSION_STORAGE_PREFIX = 'coinche:lobby-session:';
+const LAST_LOBBY_STORAGE_KEY = 'coinche:last-lobby-room';
+const LOBBY_PATH_REGEX = /^\/lobby\/([^/?#]+)/i;
 
 function isMobilePortraitGameplay() {
   // Matches the CSS breakpoint used for portrait-phone gameplay overrides.
@@ -918,6 +921,174 @@ function initDraggablePanels() {
 
 initDraggablePanels();
 
+function normalizeRoomId(roomId) {
+  return (roomId || '').toString().trim().toUpperCase();
+}
+
+function isPublicRoomId(roomId) {
+  return normalizeRoomId(roomId).startsWith('PUB-');
+}
+
+function getLobbyCodeFromUrlPath(pathname = window.location.pathname) {
+  const match = (pathname || '').match(LOBBY_PATH_REGEX);
+  if (!match || !match[1]) return null;
+  try {
+    return normalizeRoomId(decodeURIComponent(match[1]));
+  } catch {
+    return normalizeRoomId(match[1]);
+  }
+}
+
+function buildLobbyPath(roomId) {
+  const normalized = normalizeRoomId(roomId);
+  if (!normalized) return '/';
+  return `/lobby/${encodeURIComponent(normalized)}`;
+}
+
+function setLobbyPath(roomId, { replace = false } = {}) {
+  const targetPath = buildLobbyPath(roomId);
+  if (!window.history || !targetPath) return;
+  if (window.location.pathname === targetPath) return;
+  const fn = replace ? 'replaceState' : 'pushState';
+  window.history[fn]({}, '', targetPath);
+}
+
+function setHomePath({ replace = false } = {}) {
+  if (!window.history) return;
+  if (window.location.pathname === '/') return;
+  const fn = replace ? 'replaceState' : 'pushState';
+  window.history[fn]({}, '', '/');
+}
+
+function getLobbySessionStorageKey(roomId) {
+  const normalized = normalizeRoomId(roomId);
+  if (!normalized) return null;
+  return `${LOBBY_SESSION_STORAGE_PREFIX}${normalized}`;
+}
+
+function saveLobbySession(data) {
+  const roomId = normalizeRoomId(data?.roomId);
+  const sessionKey = (data?.sessionKey || '').toString().trim();
+  const position = (data?.position || '').toString().trim();
+  if (!roomId || !sessionKey || !position) return;
+
+  const key = getLobbySessionStorageKey(roomId);
+  if (!key) return;
+
+  const playerNameFromInput = (document.getElementById('player-name')?.value || '').toString().trim();
+  const payload = {
+    roomId,
+    sessionKey,
+    position,
+    playerName: (data?.playerName || playerNameFromInput || 'Joueur').slice(0, 20),
+    isPublic: !!data?.isPublic,
+    roomName: data?.roomName || null,
+    savedAt: Date.now()
+  };
+
+  try {
+    localStorage.setItem(key, JSON.stringify(payload));
+    localStorage.setItem(LAST_LOBBY_STORAGE_KEY, roomId);
+  } catch {
+    // Ignore storage failures.
+  }
+}
+
+function loadLobbySession(roomId) {
+  const key = getLobbySessionStorageKey(roomId);
+  if (!key) return null;
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed || normalizeRoomId(parsed.roomId) !== normalizeRoomId(roomId)) return null;
+    if (!parsed.sessionKey || !parsed.position) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+function removeLobbySession(roomId) {
+  const normalized = normalizeRoomId(roomId);
+  if (!normalized) return;
+  const key = getLobbySessionStorageKey(normalized);
+  if (!key) return;
+  try {
+    localStorage.removeItem(key);
+    if (localStorage.getItem(LAST_LOBBY_STORAGE_KEY) === normalized) {
+      localStorage.removeItem(LAST_LOBBY_STORAGE_KEY);
+    }
+  } catch {
+    // Ignore storage failures.
+  }
+}
+
+function getPreferredPlayerName() {
+  return (document.getElementById('player-name')?.value || '').toString().trim().slice(0, 20) || 'Joueur';
+}
+
+function prefillLobbyFromUrlPath() {
+  const lobbyCode = getLobbyCodeFromUrlPath();
+  if (!lobbyCode || isPublicRoomId(lobbyCode)) return;
+
+  const roomCodeInput = document.getElementById('room-code');
+  if (roomCodeInput && !roomCodeInput.value.trim()) {
+    roomCodeInput.value = lobbyCode;
+  }
+}
+
+function attemptRoomReconnectFromUrl() {
+  const lobbyCode = getLobbyCodeFromUrlPath();
+  if (!lobbyCode) return;
+
+  const session = loadLobbySession(lobbyCode);
+  if (session?.playerName) {
+    const playerNameInput = document.getElementById('player-name');
+    if (playerNameInput && !playerNameInput.value.trim()) {
+      playerNameInput.value = session.playerName;
+    }
+  }
+
+  if (session?.sessionKey) {
+    socket.emit('reconnect-room', {
+      roomId: lobbyCode,
+      sessionKey: session.sessionKey,
+      name: session.playerName || getPreferredPlayerName()
+    });
+    return;
+  }
+
+  if (!isPublicRoomId(lobbyCode)) {
+    socket.emit('get-available-positions', { roomId: lobbyCode });
+  }
+}
+
+function handleRoomEntry(data, { clearChatMessages = true, ownerFallback = false } = {}) {
+  myRoom = normalizeRoomId(data?.roomId);
+  myPosition = data?.position || null;
+  isRoomOwner = typeof data?.isOwner === 'boolean' ? data.isOwner : ownerFallback;
+
+  if (data?.playerName) {
+    const playerNameInput = document.getElementById('player-name');
+    if (playerNameInput) {
+      playerNameInput.value = data.playerName;
+    }
+  }
+
+  updateWaitingRoomRoomInfo(data);
+  if (clearChatMessages) {
+    clearChat();
+    ensurePrivateLobbyCodeFirstChatMessage(data);
+  }
+
+  saveLobbySession(data);
+  if (myRoom) setLobbyPath(myRoom, { replace: true });
+  showScreen('waiting');
+}
+
+prefillLobbyFromUrlPath();
+
 // ---- Screen management ----
 function showScreen(name) {
   Object.values(screens).forEach(s => s.classList.add('hidden'));
@@ -1045,9 +1216,11 @@ socket.on('public-rooms', (data) => {
 });
 
 socket.on('public-room-closed', () => {
+  if (myRoom) removeLobbySession(myRoom);
   myRoom = null;
   myPosition = null;
   gameState = null;
+  setHomePath({ replace: true });
   showScreen('lobby');
   requestPublicRooms();
 });
@@ -1058,6 +1231,15 @@ setInterval(() => {
 }, PUBLIC_ROOMS_REFRESH_MS);
 
 requestPublicRooms();
+
+socket.on('connect', () => {
+  attemptRoomReconnectFromUrl();
+});
+
+socket.on('reconnect-failed', (data) => {
+  const failedRoom = normalizeRoomId(data?.roomId || getLobbyCodeFromUrlPath());
+  if (failedRoom) removeLobbySession(failedRoom);
+});
 
 socket.on('available-positions', (data) => {
   const select = document.getElementById('join-position');
@@ -1137,27 +1319,34 @@ function ensurePrivateLobbyCodeFirstChatMessage(data) {
 
 // ---- Socket events ----
 socket.on('room-created', (data) => {
-  myRoom = data.roomId;
-  myPosition = data.position;
-  isRoomOwner = true;
-  updateWaitingRoomRoomInfo(data);
-  clearChat();
-  ensurePrivateLobbyCodeFirstChatMessage(data);
-  showScreen('waiting');
+  handleRoomEntry(data, { clearChatMessages: true, ownerFallback: true });
 });
 
 socket.on('room-joined', (data) => {
-  myRoom = data.roomId;
-  myPosition = data.position;
-  isRoomOwner = false;
-  updateWaitingRoomRoomInfo(data);
-  clearChat();
-  ensurePrivateLobbyCodeFirstChatMessage(data);
-  showScreen('waiting');
+  handleRoomEntry(data, { clearChatMessages: true, ownerFallback: false });
+});
+
+socket.on('room-reconnected', (data) => {
+  handleRoomEntry(data, { clearChatMessages: false, ownerFallback: false });
 });
 
 socket.on('error-msg', (data) => {
-  showError(data.message);
+  const message = (data?.message || '').toString();
+  const roomIsClosedError =
+    message.includes('Salle fermée') ||
+    message.includes('n\'existe plus') ||
+    message.includes('Session expirée');
+
+  if (roomIsClosedError && myRoom) {
+    removeLobbySession(myRoom);
+    myRoom = null;
+    myPosition = null;
+    gameState = null;
+    setHomePath({ replace: true });
+    showScreen('lobby');
+  }
+
+  showError(message);
 });
 
 socket.on('message', (data) => {
