@@ -363,7 +363,69 @@ function evaluateNoTrumpBid(hand) {
   return clampToBidSteps(points);
 }
 
-function bestBidFromHand(hand) {
+function getOpeningBidPlayer(game) {
+  if (!game || !game.dealer || typeof getNextPlayer !== 'function') return null;
+  return getNextPlayer(game.dealer);
+}
+
+function getFirstSuitBidByPlayer(bids, player) {
+  if (!Array.isArray(bids) || !player) return null;
+  for (const b of bids) {
+    if (!b || b.type !== 'bid' || b.player !== player) continue;
+    if (SUITS.includes(b.suit)) return b;
+  }
+  return null;
+}
+
+function estimateSpecialAnnouncementRiskPenalty(hand, candidateSuit, game, currentPlayer) {
+  if (candidateSuit !== 'tout-atout' && candidateSuit !== 'sans-atout') return 0;
+  if (!Array.isArray(hand) || !game || !currentPlayer) return 0;
+
+  const openingBidPlayer = getOpeningBidPlayer(game);
+  if (!openingBidPlayer || openingBidPlayer === currentPlayer) return 0;
+
+  const myTeam = typeof getTeam === 'function' ? getTeam(currentPlayer) : null;
+  const openingTeam = typeof getTeam === 'function' ? getTeam(openingBidPlayer) : null;
+  const openerIsOpponent = !!myTeam && !!openingTeam && myTeam !== openingTeam;
+
+  let penalty = 0;
+  const unknownCardsAtBiddingStart = 24;
+  const opponentsCombinedSlots = 16;
+
+  if (candidateSuit === 'tout-atout') {
+    const jackCount = hand.filter(c => c && c.rank === 'valet').length;
+    const missingJacks = Math.max(0, 4 - jackCount);
+    const oppControlProb = probabilityAtLeastOneSuccess(
+      unknownCardsAtBiddingStart,
+      missingJacks,
+      opponentsCombinedSlots
+    );
+    penalty += oppControlProb * (openerIsOpponent ? 30 : 16);
+  } else {
+    const aceCount = hand.filter(c => c && c.rank === 'as').length;
+    const missingAces = Math.max(0, 4 - aceCount);
+    const oppControlProb = probabilityAtLeastOneSuccess(
+      unknownCardsAtBiddingStart,
+      missingAces,
+      opponentsCombinedSlots
+    );
+    penalty += oppControlProb * (openerIsOpponent ? 24 : 12);
+  }
+
+  // If the opening opponent has already shown a suit, assume they can safely run/"filer"
+  // in TA/SA unless we hold the jack of that announced suit.
+  if (openerIsOpponent) {
+    const openingSuitBid = getFirstSuitBidByPlayer(game.bids, openingBidPlayer);
+    if (openingSuitBid && SUITS.includes(openingSuitBid.suit)) {
+      const hasAnnouncedSuitJack = hand.some(c => c && c.suit === openingSuitBid.suit && c.rank === 'valet');
+      if (!hasAnnouncedSuitJack) penalty += 22;
+    }
+  }
+
+  return Math.min(60, penalty);
+}
+
+function bestBidFromHand(hand, game, currentPlayer) {
   const candidates = [];
   for (const suit of SUITS) {
     candidates.push({ suit, points: evaluateSuitBid(hand, suit) });
@@ -371,8 +433,22 @@ function bestBidFromHand(hand) {
   candidates.push({ suit: 'tout-atout', points: evaluateAllTrumpBid(hand) });
   candidates.push({ suit: 'sans-atout', points: evaluateNoTrumpBid(hand) });
 
-  candidates.sort((a, b) => b.points - a.points);
-  return candidates[0];
+  const adjustedCandidates = candidates.map(candidate => {
+    const penalty = estimateSpecialAnnouncementRiskPenalty(hand, candidate.suit, game, currentPlayer);
+    const adjustedPoints = clampToBidSteps(candidate.points - penalty);
+    return {
+      ...candidate,
+      rawPoints: candidate.points,
+      riskPenalty: penalty,
+      points: adjustedPoints
+    };
+  });
+
+  adjustedCandidates.sort((a, b) => {
+    if (b.points !== a.points) return b.points - a.points;
+    return (b.rawPoints || 0) - (a.rawPoints || 0);
+  });
+  return adjustedCandidates[0];
 }
 
 function estimateDefensePotentialPoints(hand, contractSuit) {
@@ -613,7 +689,7 @@ function chooseBid(game) {
     }
   }
 
-  const best = bestBidFromHand(hand);
+  const best = bestBidFromHand(hand, game, game.currentPlayer);
 
   // Opening bid
   if (!topBid) {
