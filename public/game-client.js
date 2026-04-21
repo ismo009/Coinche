@@ -1330,6 +1330,18 @@ socket.on('room-reconnected', (data) => {
   handleRoomEntry(data, { clearChatMessages: false, ownerFallback: false });
 });
 
+socket.on('kicked-from-room', (data) => {
+  const kickedRoom = normalizeRoomId(data?.roomId || myRoom);
+  if (kickedRoom) removeLobbySession(kickedRoom);
+  myRoom = null;
+  myPosition = null;
+  gameState = null;
+  isRoomOwner = false;
+  setHomePath({ replace: true });
+  showScreen('lobby');
+  requestPublicRooms();
+});
+
 socket.on('error-msg', (data) => {
   const message = (data?.message || '').toString();
   const roomIsClosedError =
