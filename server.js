@@ -23,6 +23,22 @@ const PUBLIC_CLEANUP_INTERVAL_MS = 30 * 1000;
 const PLAYER_RECONNECT_GRACE_MS = 2 * 60 * 1000;
 const PHANTOM_LOBBY_GRACE_MS = 60 * 1000;
 
+const suitNames = {
+  coeur: '♥ Coeur',
+  carreau: '♦ Carreau',
+  trefle: '♣ Trefle',
+  pique: '♠ Pique',
+  'tout-atout': 'Tout Atout',
+  'sans-atout': 'Sans Atout'
+};
+
+function formatBidPoints(points) {
+  if (points === 270) return 'Capot belote (270)';
+  if (points === 250) return 'Capot (250)';
+  if (points === 500) return 'Generale (500)';
+  return `${points}`;
+}
+
 const ROOM_NAME_NOUNS = [
   'Table', 'Salon', 'Atout', 'Belote', 'Coinche', 'Pli', 'Trèfle', 'Carreau', 'Pique', 'Cœur'
 ];
