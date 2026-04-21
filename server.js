@@ -247,7 +247,6 @@ function maybeProcessBotTurn(roomId) {
         if (result.action === 'redistribute') {
           broadcastMessage(roomId, 'Tout le monde passe. Redistribution des cartes.', 'info');
           latest.startNewRound();
-          broadcastMessage(roomId, 'Tout le monde a passé - redistribution !', 'warning');
         }
 
         if (result.action === 'play') {
@@ -629,7 +628,6 @@ io.on('connection', (socket) => {
     if (result.action === 'redistribute') {
       broadcastMessage(currentRoom, 'Tout le monde passe. Redistribution des cartes.', 'info');
       game.startNewRound();
-      broadcastMessage(currentRoom, 'Tout le monde a passé - redistribution !', 'warning');
     }
 
     if (result.action === 'play') {
