@@ -25,7 +25,20 @@
       <p class="subtitle">Coinche en ligne par l'INSA pour l'INSA</p>
 
       <div class="lobby-form">
-        <input type="text" id="player-name" placeholder="Ton pseudo" maxlength="20" autocomplete="off">
+        <div class="lobby-name-row">
+          <input type="text" id="player-name" placeholder="Ton pseudo" maxlength="20" autocomplete="off">
+
+          <div class="texture-picker" aria-label="Sélecteur de texture pack">
+            <button id="btn-texture-picker" class="btn btn-secondary texture-picker-btn" type="button"
+              aria-expanded="false" aria-controls="texture-picker-panel" aria-label="Choisir un texture pack">
+              <img src="/logo/TEXTURE.png" alt="" loading="lazy" decoding="async">
+            </button>
+            <div id="texture-picker-panel" class="texture-picker-panel hidden">
+              <label for="texture-pack-select">Choisir un texture pack</label>
+              <select id="texture-pack-select"></select>
+            </div>
+          </div>
+        </div>
 
         <div class="lobby-actions">
           <div class="action-group">
@@ -87,7 +100,7 @@
       </a>
 
       <div class="lobby-version-panel">
-        <p>Version jeux 1.2.1</p>
+        <p>Version jeux 1.2.2</p>
         <p>Version IA : 0.1.3</p>
       </div>
     </div>

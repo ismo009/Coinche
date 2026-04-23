@@ -11,9 +11,11 @@ let gameState = null;
 let isRoomOwner = false;
 let addBotWarningShown = false;
 let pendingRoomLeave = false;
+let currentTexturePack = 'Classic';
+let availableTexturePacks = ['Classic','Balatro'];
 
 // Trick collect animation (UX): wait 0.2s then slide cards to trick winner.
-const TRICK_COLLECT_DELAY_MS = 200;
+const TRICK_COLLECT_DELAY_MS = 300;
 const TRICK_COLLECT_ANIM_MS = 500;
 
 // Card play animation (hand -> center)
@@ -57,12 +59,41 @@ const publicRoomsUi = {
   refreshBtn: document.getElementById('btn-public-refresh')
 };
 
+const texturePickerUi = {
+  button: document.getElementById('btn-texture-picker'),
+  panel: document.getElementById('texture-picker-panel'),
+  select: document.getElementById('texture-pack-select'),
+  currentLabel: document.getElementById('texture-pack-current')
+};
+
 const CHAT_MAX_MESSAGES = 120;
 const PANEL_POS_STORAGE_PREFIX = 'coinche-panel-pos:';
 const PUBLIC_ROOMS_REFRESH_MS = 10000;
 const LOBBY_SESSION_STORAGE_PREFIX = 'coinche:lobby-session:';
 const LAST_LOBBY_STORAGE_KEY = 'coinche:last-lobby-room';
 const LOBBY_PATH_REGEX = /^\/lobby\/([^/?#]+)/i;
+const TEXTURE_PACK_STORAGE_KEY = 'coinche:texture-pack:selected';
+
+function loadPreferredTexturePack() {
+  try {
+    return localStorage.getItem(TEXTURE_PACK_STORAGE_KEY);
+  } catch {
+    return null;
+  }
+}
+
+function savePreferredTexturePack(packName) {
+  try {
+    localStorage.setItem(TEXTURE_PACK_STORAGE_KEY, packName);
+  } catch {
+    // Ignore storage failures.
+  }
+}
+
+const savedTexturePack = loadPreferredTexturePack();
+if (savedTexturePack) {
+  currentTexturePack = savedTexturePack;
+}
 
 function isMobilePortraitGameplay() {
   // Matches the CSS breakpoint used for portrait-phone gameplay overrides.
@@ -275,6 +306,149 @@ const CARD_TEXTURES = {
   extension: 'png'
 };
 
+function normalizeTexturePackName(raw) {
+  if (typeof raw !== 'string') return null;
+  const value = raw.trim();
+  if (!value) return null;
+  if (!/^[A-Za-z0-9_-]+$/.test(value)) return null;
+  return value;
+}
+
+function normalizeTexturePackList(rawPacks) {
+  const source = Array.isArray(rawPacks) ? rawPacks : [];
+  const seen = new Set();
+  const result = [];
+
+  for (const item of source) {
+    const packName = normalizeTexturePackName(item);
+    if (!packName) continue;
+    const key = packName.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    result.push(packName);
+  }
+
+  if (result.length === 0) {
+    result.push('Classic');
+  }
+
+  return result;
+}
+
+function updateTexturePickerLabel() {
+  if (texturePickerUi.currentLabel) {
+    texturePickerUi.currentLabel.textContent = currentTexturePack;
+  }
+  if (texturePickerUi.button) {
+    const label = `Texture pack: ${currentTexturePack}`;
+    texturePickerUi.button.title = label;
+    texturePickerUi.button.setAttribute('aria-label', label);
+  }
+}
+
+function syncTexturePickerSelectValue() {
+  if (!texturePickerUi.select) return;
+  const hasValue = Array.from(texturePickerUi.select.options)
+    .some(option => option.value.toLowerCase() === currentTexturePack.toLowerCase());
+  if (hasValue) {
+    texturePickerUi.select.value = currentTexturePack;
+  }
+}
+
+function renderTexturePickerOptions() {
+  if (!texturePickerUi.select) return;
+
+  texturePickerUi.select.innerHTML = '';
+  for (const packName of availableTexturePacks) {
+    const option = document.createElement('option');
+    option.value = packName;
+    option.textContent = packName;
+    texturePickerUi.select.appendChild(option);
+  }
+
+  syncTexturePickerSelectValue();
+}
+
+function setTexturePack(packName, { rerender = true, persist = false } = {}) {
+  const normalized = normalizeTexturePackName(packName) || 'Classic';
+  const changed = normalized !== currentTexturePack;
+
+  currentTexturePack = normalized;
+  if (persist) {
+    savePreferredTexturePack(currentTexturePack);
+  }
+
+  applyBackTextureCssVar();
+  updateTexturePickerLabel();
+  syncTexturePickerSelectValue();
+
+  if (changed && rerender && gameState) {
+    updateDisplay();
+  }
+}
+
+function applyTexturePackOptions(data = {}) {
+  availableTexturePacks = normalizeTexturePackList(data.availablePacks);
+  const selectedPack = normalizeTexturePackName(currentTexturePack);
+  const defaultPack = normalizeTexturePackName(data.defaultPack);
+
+  const selectedIsAvailable = !!selectedPack && availableTexturePacks.some(
+    pack => pack.toLowerCase() === selectedPack.toLowerCase()
+  );
+
+  let targetPack = selectedIsAvailable ? selectedPack : null;
+  if (!targetPack && defaultPack) {
+    targetPack = availableTexturePacks.find(
+      pack => pack.toLowerCase() === defaultPack.toLowerCase()
+    ) || null;
+  }
+  if (!targetPack) {
+    targetPack = availableTexturePacks[0] || 'Classic';
+  }
+
+  renderTexturePickerOptions();
+  setTexturePack(targetPack, { rerender: true, persist: true });
+}
+
+function getPreferredTexturePackForRequest() {
+  return normalizeTexturePackName(currentTexturePack) || 'Classic';
+}
+
+function setTexturePickerPanelOpen(isOpen) {
+  if (!texturePickerUi.button || !texturePickerUi.panel) return;
+  texturePickerUi.panel.classList.toggle('hidden', !isOpen);
+  texturePickerUi.button.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+}
+
+function initLobbyTexturePicker() {
+  if (!texturePickerUi.button || !texturePickerUi.panel || !texturePickerUi.select) return;
+
+  availableTexturePacks = normalizeTexturePackList(availableTexturePacks);
+  renderTexturePickerOptions();
+  setTexturePack(currentTexturePack, { rerender: false, persist: true });
+
+  texturePickerUi.button.addEventListener('click', (event) => {
+    event.stopPropagation();
+    const shouldOpen = texturePickerUi.panel.classList.contains('hidden');
+    setTexturePickerPanelOpen(shouldOpen);
+  });
+
+  texturePickerUi.select.addEventListener('change', () => {
+    const selectedPack = normalizeTexturePackName(texturePickerUi.select.value);
+    if (!selectedPack) return;
+    setTexturePack(selectedPack, { rerender: false, persist: true });
+    setTexturePickerPanelOpen(false);
+  });
+
+  document.addEventListener('click', (event) => {
+    if (texturePickerUi.panel.classList.contains('hidden')) return;
+    const target = event.target;
+    if (!(target instanceof Node)) return;
+    if (texturePickerUi.panel.contains(target) || texturePickerUi.button.contains(target)) return;
+    setTexturePickerPanelOpen(false);
+  });
+}
+
 function getCardTextureUrl(card) {
   // Mapping for the current assets naming convention in public/cards/.
   // Example: AS_COEUR.png, SEPT_PIC.png, DIX_TREFLE.png
@@ -298,12 +472,14 @@ function getCardTextureUrl(card) {
 
   const rank = rankMap[card.rank] || String(card.rank).toUpperCase();
   const suit = suitMap[card.suit] || String(card.suit).toUpperCase();
+  const packFolder = encodeURIComponent(currentTexturePack);
 
-  return `${CARD_TEXTURES.baseUrl}/${rank}_${suit}.${CARD_TEXTURES.extension}`;
+  return `${CARD_TEXTURES.baseUrl}/${packFolder}/${rank}_${suit}.${CARD_TEXTURES.extension}`;
 }
 
 function getBackTextureUrl() {
-  return `${CARD_TEXTURES.baseUrl}/${CARD_TEXTURES.backFile}`;
+  const packFolder = encodeURIComponent(currentTexturePack);
+  return `${CARD_TEXTURES.baseUrl}/${packFolder}/${CARD_TEXTURES.backFile}`;
 }
 
 function applyBackTextureCssVar() {
@@ -1055,7 +1231,8 @@ function attemptRoomReconnectFromUrl() {
     socket.emit('reconnect-room', {
       roomId: lobbyCode,
       sessionKey: session.sessionKey,
-      name: session.playerName || getPreferredPlayerName()
+      name: session.playerName || getPreferredPlayerName(),
+      texturePack: getPreferredTexturePackForRequest()
     });
     return;
   }
@@ -1089,6 +1266,7 @@ function handleRoomEntry(data, { clearChatMessages = true, ownerFallback = false
 }
 
 prefillLobbyFromUrlPath();
+initLobbyTexturePicker();
 
 // ---- Screen management ----
 function showScreen(name) {
@@ -1118,7 +1296,7 @@ function resetToLobbyAfterLeavingRoom(roomId = myRoom) {
 document.getElementById('btn-create').addEventListener('click', () => {
   const name = document.getElementById('player-name').value.trim() || 'Joueur';
   const position = document.getElementById('create-position').value;
-  socket.emit('create-room', { name, position });
+  socket.emit('create-room', { name, position, texturePack: getPreferredTexturePackForRequest() });
 });
 
 const addBotBtn = document.getElementById('btn-add-bot');
@@ -1149,14 +1327,14 @@ document.getElementById('btn-join').addEventListener('click', () => {
     return;
   }
 
-  socket.emit('join-room', { name, roomId, position });
+  socket.emit('join-room', { name, roomId, position, texturePack: getPreferredTexturePackForRequest() });
 });
 
 const publicCreateBtn = document.getElementById('btn-public-create');
 if (publicCreateBtn) {
   publicCreateBtn.addEventListener('click', () => {
     const name = document.getElementById('player-name').value.trim() || 'Joueur';
-    socket.emit('create-public-room', { name });
+    socket.emit('create-public-room', { name, texturePack: getPreferredTexturePackForRequest() });
   });
 }
 
@@ -1178,7 +1356,7 @@ if (quickPlayBtn) {
   // Compatibilite si l'ancien bouton est encore present
   quickPlayBtn.addEventListener('click', () => {
     const name = document.getElementById('player-name').value.trim() || 'Joueur';
-    socket.emit('join-public-room', { name });
+    socket.emit('join-public-room', { name, texturePack: getPreferredTexturePackForRequest() });
   });
 }
 
@@ -1221,7 +1399,11 @@ function renderPublicRooms(rooms) {
     joinBtn.textContent = 'Rejoindre';
     joinBtn.addEventListener('click', () => {
       const name = document.getElementById('player-name').value.trim() || 'Joueur';
-      socket.emit('join-public-room', { name, roomId: room.roomId });
+      socket.emit('join-public-room', {
+        name,
+        roomId: room.roomId,
+        texturePack: getPreferredTexturePackForRequest()
+      });
     });
 
     row.appendChild(meta);
@@ -1259,6 +1441,7 @@ setInterval(() => {
 requestPublicRooms();
 
 socket.on('connect', () => {
+  socket.emit('get-texture-packs');
   attemptRoomReconnectFromUrl();
 });
 
@@ -1393,6 +1576,21 @@ socket.on('message', (data) => {
 
 socket.on('chat-message', (data) => {
   addChatMessage(data);
+});
+
+socket.on('texture-pack-options', (data) => {
+  applyTexturePackOptions(data || {});
+});
+
+socket.on('texture-pack', (data) => {
+  applyTexturePackOptions(data || {});
+
+  const targetPack = normalizeTexturePackName(data?.pack)
+    || normalizeTexturePackName(data?.defaultPack)
+    || availableTexturePacks[0]
+    || 'Classic';
+
+  setTexturePack(targetPack, { rerender: true, persist: true });
 });
 
 // game-state handled below with transition detection
