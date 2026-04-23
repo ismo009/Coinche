@@ -10,6 +10,7 @@ let myRoom = null;
 let gameState = null;
 let isRoomOwner = false;
 let addBotWarningShown = false;
+let pendingRoomLeave = false;
 
 // Trick collect animation (UX): wait 0.2s then slide cards to trick winner.
 const TRICK_COLLECT_DELAY_MS = 200;
@@ -1095,6 +1096,24 @@ function showScreen(name) {
   screens[name].classList.remove('hidden');
 }
 
+function resetToLobbyAfterLeavingRoom(roomId = myRoom) {
+  const normalizedRoom = normalizeRoomId(roomId || myRoom);
+  if (normalizedRoom) removeLobbySession(normalizedRoom);
+
+  myRoom = null;
+  myPosition = null;
+  gameState = null;
+  isRoomOwner = false;
+  pendingRoomLeave = false;
+
+  const panel = document.getElementById('round-result');
+  if (panel) panel.classList.add('hidden');
+
+  setHomePath({ replace: true });
+  showScreen('lobby');
+  requestPublicRooms();
+}
+
 // ---- Lobby ----
 document.getElementById('btn-create').addEventListener('click', () => {
   const name = document.getElementById('player-name').value.trim() || 'Joueur';
@@ -1223,6 +1242,13 @@ socket.on('public-room-closed', () => {
   setHomePath({ replace: true });
   showScreen('lobby');
   requestPublicRooms();
+});
+
+socket.on('room-left', (data) => {
+  const leftRoom = normalizeRoomId(data?.roomId || myRoom);
+  const backHomeBtn = document.getElementById('btn-back-home');
+  if (backHomeBtn) backHomeBtn.disabled = false;
+  resetToLobbyAfterLeavingRoom(leftRoom);
 });
 
 setInterval(() => {
@@ -1886,6 +1912,20 @@ document.getElementById('btn-new-game').addEventListener('click', () => {
   document.getElementById('round-result').classList.add('hidden');
 });
 
+document.getElementById('btn-back-home').addEventListener('click', () => {
+  const backHomeBtn = document.getElementById('btn-back-home');
+
+  if (!myRoom) {
+    if (backHomeBtn) backHomeBtn.disabled = false;
+    resetToLobbyAfterLeavingRoom(null);
+    return;
+  }
+
+  pendingRoomLeave = true;
+  if (backHomeBtn) backHomeBtn.disabled = true;
+  socket.emit('leave-room');
+});
+
 if (chatElements.send) {
   chatElements.send.addEventListener('click', sendChatMessage);
 }
@@ -1901,6 +1941,8 @@ if (chatElements.input) {
 
 // Main game-state listener
 socket.on('game-state', (state) => {
+  if (pendingRoomLeave) return;
+
   if (trickCollect.running) {
     trickCollect.queuedState = state;
     return;
@@ -1933,6 +1975,7 @@ function showRoundResult(state) {
   const details = document.getElementById('result-details');
   const btnNext = document.getElementById('btn-next-round');
   const btnNew = document.getElementById('btn-new-game');
+  const btnBackHome = document.getElementById('btn-back-home');
 
   panel.classList.remove('hidden');
 
@@ -1951,6 +1994,10 @@ function showRoundResult(state) {
     `;
     btnNext.classList.add('hidden');
     btnNew.classList.remove('hidden');
+    if (btnBackHome) {
+      btnBackHome.classList.remove('hidden');
+      btnBackHome.disabled = pendingRoomLeave;
+    }
   } else {
     title.textContent = 'Fin de manche';
     title.className = '';
@@ -1960,6 +2007,10 @@ function showRoundResult(state) {
     `;
     btnNext.classList.remove('hidden');
     btnNew.classList.add('hidden');
+    if (btnBackHome) {
+      btnBackHome.classList.add('hidden');
+      btnBackHome.disabled = false;
+    }
   }
 }
 
