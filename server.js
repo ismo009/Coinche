@@ -166,6 +166,16 @@ function isRoomOwner(game, socketId) {
   return !!game && typeof game.ownerId === 'string' && game.ownerId === socketId;
 }
 
+function getNextRoomOwnerId(game) {
+  if (!game) return null;
+  for (const pos of POSITIONS) {
+    const player = game.players[pos];
+    if (!player || player.isBot === true || player.connected === false) continue;
+    return player.id;
+  }
+  return null;
+}
+
 function normalizePositionToken(raw) {
   if (typeof raw !== 'string') return null;
   const token = raw
@@ -731,6 +741,47 @@ io.on('connection', (socket) => {
     maybeProcessBotTurn(currentRoom);
   });
 
+  socket.on('leave-room', () => {
+    if (!currentRoom) {
+      socket.emit('room-left', { roomId: null });
+      return;
+    }
+
+    const roomId = currentRoom;
+    const game = games.get(roomId);
+
+    socket.leave(roomId);
+    currentRoom = null;
+
+    if (!game) {
+      socket.emit('room-left', { roomId });
+      return;
+    }
+
+    const position = game.getPlayerPosition(socket.id);
+    if (!position) {
+      socket.emit('room-left', { roomId });
+      return;
+    }
+
+    const leavingPlayer = game.players[position];
+    const leavingName = leavingPlayer?.name || playerName || 'Un joueur';
+    const wasOwner = isRoomOwner(game, socket.id);
+
+    game.removePlayer(socket.id);
+
+    if (wasOwner) {
+      game.ownerId = getNextRoomOwnerId(game);
+    }
+
+    broadcastMessage(roomId, `${leavingName} a quitté la salle.`, 'info');
+    broadcastGameState(roomId);
+    touchRoom(roomId);
+    updatePhantomLobbyState(roomId, game);
+
+    socket.emit('room-left', { roomId, position });
+  });
+
   socket.on('get-available-positions', (data) => {
     const roomId = (data.roomId || '').toUpperCase().trim();
     const game = games.get(roomId);
@@ -767,6 +818,7 @@ io.on('connection', (socket) => {
       const sendHelp = () => {
         emitSystemChatToSocket(socket.id, 'Commandes disponibles :');
         emitSystemChatToSocket(socket.id, '/help - Affiche cette aide.');
+        emitSystemChatToSocket(socket.id, '/host - Affiche le point cardinal de l\'hôte de la partie.');
         emitSystemChatToSocket(socket.id, '/kick Nord|Sud|Est|Ouest - Expulse un joueur de la position (créateur uniquement).');
         emitSystemChatToSocket(socket.id, '/addia Nord|Sud|Est|Ouest - Ajoute une IA sur la position (créateur uniquement).');
       };
@@ -778,6 +830,18 @@ io.on('connection', (socket) => {
 
       if (command === 'help') {
         sendHelp();
+        touchRoom(currentRoom);
+        return;
+      }
+
+      if (command === 'host') {
+        const ownerPosition = game.getPlayerPosition(game.ownerId);
+        if (!ownerPosition) {
+          emitSystemChatToSocket(socket.id, 'Hôte introuvable pour cette partie.');
+          return;
+        }
+
+        emitSystemChatToSocket(socket.id, `L'hôte est en ${positionLabelFr(ownerPosition)}.`);
         touchRoom(currentRoom);
         return;
       }
