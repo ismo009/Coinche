@@ -363,6 +363,73 @@ body {
   margin: 0 auto;
 }
 
+.lobby-name-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+}
+
+.texture-picker {
+  position: relative;
+  display: inline-flex;
+}
+
+.texture-picker-btn {
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border-radius: 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1.5px solid rgba(39, 72, 85, 0.34);
+  background: rgba(255, 253, 248, 0.98);
+  box-shadow: 0 7px 18px rgba(0, 0, 0, 0.18);
+}
+
+.texture-picker-btn img {
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  object-fit: cover;
+  border: none;
+  background: transparent;
+}
+
+.texture-picker-btn:hover,
+.texture-picker-btn:focus-visible {
+  transform: translateY(-1px);
+  border-color: rgba(39, 72, 85, 0.58);
+  box-shadow: 0 10px 22px rgba(0, 0, 0, 0.24);
+}
+
+.texture-picker-panel {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 8px);
+  z-index: 8;
+  width: min(280px, 86vw);
+  padding: 12px;
+  border-radius: 12px;
+  background: rgba(249, 241, 217, 0.97);
+  border: 1px solid rgba(39, 72, 85, 0.26);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.26);
+  display: grid;
+  gap: 8px;
+  text-align: left;
+}
+
+.texture-picker-panel label {
+  font-size: 12px;
+  color: #274855;
+  font-weight: 700;
+}
+
+.texture-picker-panel select {
+  margin: 0;
+}
+
 .lobby-form input,
 .lobby-form select {
   width: 100%;
@@ -2037,6 +2104,19 @@ body.chat-collapsed .chat-open-btn {
 
   .public-menu-actions {
     grid-template-columns: 1fr;
+  }
+
+  .texture-picker {
+    justify-self: end;
+  }
+
+  .texture-picker-btn {
+    width: 40px;
+    height: 40px;
+  }
+
+  .texture-picker-panel {
+    width: min(280px, 90vw);
   }
 
   .public-room-entry {
