@@ -2430,6 +2430,7 @@ body.chat-collapsed .chat-open-btn {
   .last-trick-area .card.trick-played {
     width: 32px;
     height: 46px;
+    border-radius: 0;
   }
 
   /* Allow collapsing "Dernier pli" on phone */
