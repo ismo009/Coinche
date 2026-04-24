@@ -669,8 +669,81 @@ function computePartnerRaiseIncrement(hand, partnerSuit, partnerPoints) {
   return inc;
 }
 
+function findLatestPartnerSuitRelay(bids, currentPlayer) {
+  if (!Array.isArray(bids) || !currentPlayer) return null;
+
+  const partnerPos = typeof getPartner === 'function' ? getPartner(currentPlayer) : null;
+  if (!partnerPos) return null;
+
+  for (let partnerBidIndex = bids.length - 1; partnerBidIndex >= 0; partnerBidIndex--) {
+    const partnerBid = bids[partnerBidIndex];
+    if (!partnerBid || partnerBid.type !== 'bid' || partnerBid.player !== partnerPos) continue;
+    if (!SUITS.includes(partnerBid.suit)) continue;
+
+    for (let myBidIndex = partnerBidIndex - 1; myBidIndex >= 0; myBidIndex--) {
+      const myBid = bids[myBidIndex];
+      if (!myBid || myBid.type !== 'bid' || myBid.player !== currentPlayer) continue;
+      if (myBid.suit !== partnerBid.suit) continue;
+
+      return {
+        suit: partnerBid.suit,
+        myBid,
+        partnerBid,
+        myBidIndex,
+        partnerBidIndex,
+        partnerRaise: Math.max(0, (partnerBid.points || 0) - (myBid.points || 0))
+      };
+    }
+  }
+
+  return null;
+}
+
+function hasOpponentBidBetween(bids, myTeam, startExclusive, endExclusive) {
+  if (!Array.isArray(bids) || !myTeam) return false;
+  for (let i = startExclusive + 1; i < endExclusive; i++) {
+    const b = bids[i];
+    if (!b || b.type !== 'bid') continue;
+    const team = typeof getTeam === 'function' ? getTeam(b.player) : null;
+    if (team && team !== myTeam) return true;
+  }
+  return false;
+}
+
+function computePartnerSuitReclaimBid(game, hand) {
+  const bids = Array.isArray(game?.bids) ? game.bids : [];
+  const topBid = getHighestBidEntry(bids);
+  if (!topBid || topBid.type !== 'bid') return null;
+
+  const myTeam = typeof getTeam === 'function' ? getTeam(game.currentPlayer) : null;
+  const topBidTeam = topBid.player && typeof getTeam === 'function' ? getTeam(topBid.player) : null;
+  if (!myTeam || !topBidTeam || topBidTeam === myTeam) return null;
+
+  const relay = findLatestPartnerSuitRelay(bids, game.currentPlayer);
+  if (!relay) return null;
+
+  const topBidIndex = bids.lastIndexOf(topBid);
+  if (topBidIndex <= relay.partnerBidIndex) return null;
+  if (!hasOpponentBidBetween(bids, myTeam, relay.partnerBidIndex, topBidIndex + 1)) return null;
+
+  // Support confidence from partner signal + own cards.
+  const ownSupport = computePartnerRaiseIncrement(hand, relay.suit, relay.partnerBid.points);
+  const confidenceScore = relay.partnerRaise + ownSupport;
+  const overcallGap = Math.max(0, (topBid.points || 0) - (relay.partnerBid.points || 0));
+  const requiredScore = 25 + overcallGap * 1.5;
+  if (confidenceScore < requiredScore) return null;
+
+  // Tactical reclaim only: take the lead with the minimum legal overcall.
+  const minimalReclaim = clampToBidSteps((topBid.points || 0) + 10);
+  if (!minimalReclaim || minimalReclaim <= topBid.points) return null;
+  if (minimalReclaim > 160) return null;
+
+  return { type: 'bid', points: minimalReclaim, suit: relay.suit };
+}
+
 function chooseBid(game) {
   const hand = game.hands?.[game.currentPlayer] || [];
+  const bids = Array.isArray(game?.bids) ? game.bids : [];
   const topBid = getHighestBidEntry(game.bids);
   const myTeam = typeof getTeam === 'function' ? getTeam(game.currentPlayer) : null;
   const topBidTeam = topBid?.player && typeof getTeam === 'function' ? getTeam(topBid.player) : null;
@@ -683,7 +756,10 @@ function chooseBid(game) {
   if (shouldAllowPartnerRaise(game)) {
     const partnerBid = getHighestBidEntry(game.bids);
     const inc = computePartnerRaiseIncrement(hand, partnerBid.suit, partnerBid.points);
-    const target = clampToBidSteps(partnerBid.points + inc);
+    // Keep partner support controlled: no big jumps after an ally relay.
+    const desired = clampToBidSteps(partnerBid.points + inc);
+    const capped = clampToBidSteps(partnerBid.points + 20);
+    const target = desired > 0 && capped > 0 ? Math.min(desired, capped) : 0;
     if (target > partnerBid.points) {
       return { type: 'bid', points: target, suit: partnerBid.suit };
     }
@@ -700,6 +776,18 @@ function chooseBid(game) {
   // If partner currently has the contract and we didn't trigger a meaningful raise: pass.
   if (myTeam && topBidTeam && myTeam === topBidTeam) {
     return { type: 'pass' };
+  }
+
+  // If opponents overcalled after our partner relay in our suit,
+  // either reclaim minimally (+10) or pass (avoid uncontrolled jumps).
+  const partnerRelay = findLatestPartnerSuitRelay(bids, game.currentPlayer);
+  if (partnerRelay && myTeam && topBidTeam && myTeam !== topBidTeam && topBid) {
+    const topBidIndex = bids.lastIndexOf(topBid);
+    if (topBidIndex > partnerRelay.partnerBidIndex) {
+      const reclaim = computePartnerSuitReclaimBid(game, hand);
+      if (reclaim) return reclaim;
+      return { type: 'pass' };
+    }
   }
 
   // Competitive overcall: if our best estimate beats current contract by at least one step.
