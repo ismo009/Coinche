@@ -5,6 +5,7 @@ const crypto = require('crypto');
 const path = require('path');
 const { CoincheGame, POSITIONS, getTeam } = require('./game');
 const botLogic = require('./ai/coinche-bot');
+const texturePackConfig = require('./texture-packs');
 
 const app = express();
 const server = http.createServer(app);
@@ -22,6 +23,86 @@ const PUBLIC_INACTIVE_MS = 5 * 60 * 1000;
 const PUBLIC_CLEANUP_INTERVAL_MS = 30 * 1000;
 const PLAYER_RECONNECT_GRACE_MS = 2 * 60 * 1000;
 const PHANTOM_LOBBY_GRACE_MS = 60 * 1000;
+
+function sanitizeTexturePackName(raw) {
+  if (typeof raw !== 'string') return null;
+  const value = raw.trim();
+  if (!value) return null;
+  // Keep folder names safe (public/cards/<packName>).
+  if (!/^[A-Za-z0-9_-]+$/.test(value)) return null;
+  return value;
+}
+
+function getConfiguredTexturePacks(config) {
+  const seen = new Set();
+  const packs = [];
+  const configured = Array.isArray(config?.packs) ? config.packs : [];
+
+  for (const item of configured) {
+    const packName = sanitizeTexturePackName(item);
+    if (!packName) continue;
+    const key = packName.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    packs.push(packName);
+  }
+
+  if (packs.length === 0) {
+    packs.push('Classic');
+  }
+
+  return packs;
+}
+
+const AVAILABLE_TEXTURE_PACKS = getConfiguredTexturePacks(texturePackConfig);
+const DEFAULT_TEXTURE_PACK = (() => {
+  const configuredDefault = sanitizeTexturePackName(texturePackConfig?.defaultPack);
+  if (!configuredDefault) return AVAILABLE_TEXTURE_PACKS[0];
+
+  const resolved = AVAILABLE_TEXTURE_PACKS.find(
+    pack => pack.toLowerCase() === configuredDefault.toLowerCase()
+  );
+  return resolved || AVAILABLE_TEXTURE_PACKS[0];
+})();
+
+function resolveTexturePackName(raw) {
+  const requested = sanitizeTexturePackName(raw);
+  if (!requested) return null;
+  return AVAILABLE_TEXTURE_PACKS.find(
+    pack => pack.toLowerCase() === requested.toLowerCase()
+  ) || null;
+}
+
+function getTexturePackListLabel() {
+  return AVAILABLE_TEXTURE_PACKS.join(', ');
+}
+
+function ensurePlayerTexturePack(player) {
+  if (!player) return DEFAULT_TEXTURE_PACK;
+  const resolved = resolveTexturePackName(player.texturePack) || DEFAULT_TEXTURE_PACK;
+  player.texturePack = resolved;
+  return resolved;
+}
+
+function emitTexturePackToSocket(socketId, player) {
+  const currentPack = ensurePlayerTexturePack(player);
+  io.to(socketId).emit('texture-pack', {
+    pack: currentPack,
+    defaultPack: DEFAULT_TEXTURE_PACK,
+    availablePacks: AVAILABLE_TEXTURE_PACKS
+  });
+}
+
+function getTexturePackOptionsPayload() {
+  return {
+    defaultPack: DEFAULT_TEXTURE_PACK,
+    availablePacks: AVAILABLE_TEXTURE_PACKS
+  };
+}
+
+function resolveRequestedTexturePack(rawData) {
+  return resolveTexturePackName(rawData?.texturePack) || null;
+}
 
 const suitNames = {
   coeur: '♥ Coeur',
@@ -164,6 +245,16 @@ function updatePhantomLobbyState(roomId, game, now = Date.now()) {
 function isRoomOwner(game, socketId) {
   // Owner is the first human who created the room.
   return !!game && typeof game.ownerId === 'string' && game.ownerId === socketId;
+}
+
+function getNextRoomOwnerId(game) {
+  if (!game) return null;
+  for (const pos of POSITIONS) {
+    const player = game.players[pos];
+    if (!player || player.isBot === true || player.connected === false) continue;
+    return player.id;
+  }
+  return null;
 }
 
 function normalizePositionToken(raw) {
@@ -378,11 +469,19 @@ io.on('connection', (socket) => {
 
   let currentRoom = null;
   let playerName = null;
+  let requestedTexturePack = null;
+
+  socket.emit('texture-pack-options', getTexturePackOptionsPayload());
+
+  socket.on('get-texture-packs', () => {
+    socket.emit('texture-pack-options', getTexturePackOptionsPayload());
+  });
 
   socket.on('create-room', (data) => {
     const roomId = generateRoomCode();
     const game = new CoincheGame(roomId);
     games.set(roomId, game);
+    requestedTexturePack = resolveRequestedTexturePack(data);
 
     playerName = (data.name || 'Joueur').slice(0, 20);
     const position = data.position || 'sud';
@@ -393,6 +492,8 @@ io.on('connection', (socket) => {
     }
     game.players[position].sessionKey = generatePlayerSessionKey();
     game.players[position].connected = true;
+    game.players[position].texturePack = requestedTexturePack || DEFAULT_TEXTURE_PACK;
+    ensurePlayerTexturePack(game.players[position]);
     clearPhantomLobbyState(game);
 
     // Owner = creator (first human).
@@ -401,6 +502,7 @@ io.on('connection', (socket) => {
     currentRoom = roomId;
     socket.join(roomId);
     socket.emit('room-created', getRoomPayload(game, roomId, position));
+    emitTexturePackToSocket(socket.id, game.players[position]);
     broadcastGameState(roomId);
     broadcastMessage(roomId, `${playerName} a créé la salle (${position})`);
     touchRoom(roomId);
@@ -409,6 +511,7 @@ io.on('connection', (socket) => {
   socket.on('join-room', (data) => {
     const roomId = (data.roomId || '').toUpperCase().trim();
     const game = games.get(roomId);
+    requestedTexturePack = resolveRequestedTexturePack(data);
 
     if (!game) {
       socket.emit('error-msg', { message: 'Salle introuvable' });
@@ -434,11 +537,14 @@ io.on('connection', (socket) => {
     }
     game.players[position].sessionKey = generatePlayerSessionKey();
     game.players[position].connected = true;
+    game.players[position].texturePack = requestedTexturePack || DEFAULT_TEXTURE_PACK;
+    ensurePlayerTexturePack(game.players[position]);
     clearPhantomLobbyState(game);
 
     currentRoom = roomId;
     socket.join(roomId);
     socket.emit('room-joined', getRoomPayload(game, roomId, position));
+    emitTexturePackToSocket(socket.id, game.players[position]);
     broadcastGameState(roomId);
     broadcastMessage(roomId, `${playerName} a rejoint la salle (${position})`);
     touchRoom(roomId);
@@ -501,6 +607,8 @@ io.on('connection', (socket) => {
     }
     game.players[position].sessionKey = generatePlayerSessionKey();
     game.players[position].connected = true;
+    game.players[position].texturePack = requestedTexturePack || DEFAULT_TEXTURE_PACK;
+    ensurePlayerTexturePack(game.players[position]);
     clearPhantomLobbyState(game);
 
     currentRoom = roomId;
@@ -514,6 +622,7 @@ io.on('connection', (socket) => {
       socket.emit('room-joined', getRoomPayload(game, roomId, position));
       broadcastMessage(roomId, `${playerName} rejoint la partie publique (${position})`);
     }
+    emitTexturePackToSocket(socket.id, game.players[position]);
 
     broadcastGameState(roomId);
     touchRoom(roomId);
@@ -521,6 +630,7 @@ io.on('connection', (socket) => {
   }
 
   socket.on('create-public-room', (data) => {
+    requestedTexturePack = resolveRequestedTexturePack(data);
     playerName = (data?.name || 'Joueur').slice(0, 20);
     const room = createPublicRoom();
     // Owner = creator (first human).
@@ -530,6 +640,7 @@ io.on('connection', (socket) => {
   });
 
   socket.on('reconnect-room', (data) => {
+    requestedTexturePack = resolveRequestedTexturePack(data);
     const roomId = (data?.roomId || '').toString().toUpperCase().trim();
     const sessionKey = (data?.sessionKey || '').toString().trim();
     if (!roomId || !sessionKey) {
@@ -568,8 +679,13 @@ io.on('connection', (socket) => {
     playerName = player.name;
     currentRoom = roomId;
     socket.join(roomId);
+    if (requestedTexturePack) {
+      player.texturePack = requestedTexturePack;
+    }
+    ensurePlayerTexturePack(player);
 
     socket.emit('room-reconnected', getRoomPayload(game, roomId, position));
+    emitTexturePackToSocket(socket.id, player);
     broadcastMessage(roomId, `${player.name} est reconnecté.`);
     broadcastGameState(roomId);
     touchRoom(roomId);
@@ -605,6 +721,7 @@ io.on('connection', (socket) => {
   });
 
   socket.on('join-public-room', (data) => {
+    requestedTexturePack = resolveRequestedTexturePack(data);
     playerName = (data?.name || 'Joueur').slice(0, 20);
     const roomId = (data?.roomId || '').toUpperCase().trim();
     addSocketToPublicRoom({ createIfMissing: false, preferredRoomId: roomId || null });
@@ -616,6 +733,7 @@ io.on('connection', (socket) => {
 
   socket.on('quick-play', (data) => {
     // Alias historique: quick-play = rejoindre public, ou créer si aucune salle ouverte.
+    requestedTexturePack = resolveRequestedTexturePack(data);
     playerName = (data?.name || 'Joueur').slice(0, 20);
     addSocketToPublicRoom({ createIfMissing: true, preferredRoomId: null });
   });
@@ -731,6 +849,47 @@ io.on('connection', (socket) => {
     maybeProcessBotTurn(currentRoom);
   });
 
+  socket.on('leave-room', () => {
+    if (!currentRoom) {
+      socket.emit('room-left', { roomId: null });
+      return;
+    }
+
+    const roomId = currentRoom;
+    const game = games.get(roomId);
+
+    socket.leave(roomId);
+    currentRoom = null;
+
+    if (!game) {
+      socket.emit('room-left', { roomId });
+      return;
+    }
+
+    const position = game.getPlayerPosition(socket.id);
+    if (!position) {
+      socket.emit('room-left', { roomId });
+      return;
+    }
+
+    const leavingPlayer = game.players[position];
+    const leavingName = leavingPlayer?.name || playerName || 'Un joueur';
+    const wasOwner = isRoomOwner(game, socket.id);
+
+    game.removePlayer(socket.id);
+
+    if (wasOwner) {
+      game.ownerId = getNextRoomOwnerId(game);
+    }
+
+    broadcastMessage(roomId, `${leavingName} a quitté la salle.`, 'info');
+    broadcastGameState(roomId);
+    touchRoom(roomId);
+    updatePhantomLobbyState(roomId, game);
+
+    socket.emit('room-left', { roomId, position });
+  });
+
   socket.on('get-available-positions', (data) => {
     const roomId = (data.roomId || '').toUpperCase().trim();
     const game = games.get(roomId);
@@ -767,8 +926,10 @@ io.on('connection', (socket) => {
       const sendHelp = () => {
         emitSystemChatToSocket(socket.id, 'Commandes disponibles :');
         emitSystemChatToSocket(socket.id, '/help - Affiche cette aide.');
+        emitSystemChatToSocket(socket.id, '/host - Affiche le point cardinal de l\'hôte de la partie.');
         emitSystemChatToSocket(socket.id, '/kick Nord|Sud|Est|Ouest - Expulse un joueur de la position (créateur uniquement).');
         emitSystemChatToSocket(socket.id, '/addia Nord|Sud|Est|Ouest - Ajoute une IA sur la position (créateur uniquement).');
+        emitSystemChatToSocket(socket.id, '/texture [nomPack] - Change votre pack de textures cartes (ou affiche la liste).');
       };
 
       if (!command) {
@@ -778,6 +939,18 @@ io.on('connection', (socket) => {
 
       if (command === 'help') {
         sendHelp();
+        touchRoom(currentRoom);
+        return;
+      }
+
+      if (command === 'host') {
+        const ownerPosition = game.getPlayerPosition(game.ownerId);
+        if (!ownerPosition) {
+          emitSystemChatToSocket(socket.id, 'Hôte introuvable pour cette partie.');
+          return;
+        }
+
+        emitSystemChatToSocket(socket.id, `L'hôte est en ${positionLabelFr(ownerPosition)}.`);
         touchRoom(currentRoom);
         return;
       }
@@ -853,6 +1026,39 @@ io.on('connection', (socket) => {
         emitSystemChatToSocket(socket.id, `IA ajoutée sur ${positionLabelFr(targetPos)}.`);
         // Si c'est le tour de cette position en cours de partie, l'IA joue immédiatement.
         maybeProcessBotTurn(currentRoom);
+        return;
+      }
+
+      if (command === 'texture') {
+        const requester = game.players[position];
+        const currentPack = ensurePlayerTexturePack(requester);
+
+        if (!arg || arg.toLowerCase() === 'list') {
+          emitSystemChatToSocket(socket.id, `Pack actuel : ${currentPack}`);
+          emitSystemChatToSocket(socket.id, `Packs disponibles : ${getTexturePackListLabel()}`);
+          emitSystemChatToSocket(socket.id, 'Usage : /texture <nomPack>');
+          touchRoom(currentRoom);
+          return;
+        }
+
+        const nextPack = resolveTexturePackName(arg);
+        if (!nextPack) {
+          emitSystemChatToSocket(socket.id, `Pack inconnu : ${arg}`);
+          emitSystemChatToSocket(socket.id, `Packs disponibles : ${getTexturePackListLabel()}`);
+          touchRoom(currentRoom);
+          return;
+        }
+
+        if (nextPack === currentPack) {
+          emitSystemChatToSocket(socket.id, `Le pack ${nextPack} est déjà actif.`);
+          touchRoom(currentRoom);
+          return;
+        }
+
+        requester.texturePack = nextPack;
+        emitTexturePackToSocket(socket.id, requester);
+        emitSystemChatToSocket(socket.id, `Pack de textures actif : ${nextPack}`);
+        touchRoom(currentRoom);
         return;
       }
 
