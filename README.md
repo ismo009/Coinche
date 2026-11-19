@@ -35,6 +35,8 @@ Serveur disponible sur `http://localhost:3000`.
 
 - Gestion des salles privees en temps reel (creation/rejoindre).
 - Verification des positions disponibles avant de rejoindre.
+- Changement de place dans la salle d'attente : cliquer sur un siege libre pour s'y placer
+  (impossible une fois la partie lancee).
 - Chat de table en direct.
 - Encheres completes: passe, coinche, surcoinche, contrats speciaux.
 - Gestion des plis et validation des cartes jouables selon les regles.

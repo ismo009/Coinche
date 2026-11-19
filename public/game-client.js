@@ -1997,18 +1997,63 @@ function updateWaitingRoom() {
     addBotBtn.classList.toggle('hidden', !canAddBot);
   }
 
+  const me = gameState.myPosition || myPosition;
+  const canMove = gameState.state === 'waiting';
+
   for (const pos of ['sud', 'nord', 'est', 'ouest']) {
     const slot = document.getElementById(`slot-${pos}`);
     const nameEl = slot.querySelector('.slot-name');
-    if (gameState.players[pos]) {
-      nameEl.textContent = `${gameState.players[pos].name} (${posNames[pos] || pos})`;
-      slot.classList.add('occupied');
+    const isFree = !gameState.players[pos];
+    const isMine = pos === me;
+
+    if (!isFree) {
+      const suffix = isMine ? ' (moi)' : '';
+      nameEl.textContent = `${gameState.players[pos].name}${suffix}`;
     } else {
-      nameEl.textContent = 'En attente...';
-      slot.classList.remove('occupied');
+      nameEl.textContent = canMove ? 'Libre, clique pour t\'y placer' : 'En attente...';
+    }
+
+    slot.classList.toggle('occupied', !isFree);
+    slot.classList.toggle('mine', isMine);
+    slot.classList.toggle('free', isFree && canMove);
+    if (isFree && canMove) {
+      slot.setAttribute('role', 'button');
+      slot.setAttribute('tabindex', '0');
+      slot.setAttribute('aria-label', `Se placer en ${posNames[pos] || pos}`);
+    } else {
+      slot.removeAttribute('role');
+      slot.removeAttribute('tabindex');
+      slot.removeAttribute('aria-label');
     }
   }
 }
+
+// Clic (ou Entrée / Espace) sur un siège libre de la salle d'attente : on s'y place.
+function requestSeatChange(pos) {
+  if (!gameState || gameState.state !== 'waiting') return;
+  if (gameState.players[pos]) return;
+  socket.emit('change-seat', { position: pos });
+}
+
+for (const pos of ['sud', 'nord', 'est', 'ouest']) {
+  const slot = document.getElementById(`slot-${pos}`);
+  if (!slot) continue;
+  slot.addEventListener('click', () => requestSeatChange(pos));
+  slot.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      requestSeatChange(pos);
+    }
+  });
+}
+
+socket.on('seat-changed', (data) => {
+  if (!data || !data.position) return;
+  myPosition = data.position;
+  if (typeof data.isOwner === 'boolean') isRoomOwner = data.isOwner;
+  saveLobbySession(data);
+  if (gameState) updateDisplay();
+});
 
 function setTextWithBump(id, value) {
   const el = document.getElementById(id);

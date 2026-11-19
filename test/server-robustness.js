@@ -101,6 +101,60 @@ async function main() {
     assert.strictEqual((await created3).playerName, 'ABCD');
     console.log('  ok  - caractères de contrôle retirés des noms');
 
+    // 5) Changer de place dans la salle d'attente.
+    const alice = await connect();
+    const aliceRoom = once(alice, 'room-created');
+    alice.emit('create-room', { name: 'Alice', position: 'sud' });
+    const { roomId, sessionKey } = await aliceRoom;
+    const bob = await connect();
+    const bobJoined = once(bob, 'room-joined');
+    bob.emit('join-room', { name: 'Bob', roomId, position: 'nord' });
+    await bobJoined;
+
+    let err = once(alice, 'error-msg');
+    alice.emit('change-seat', { position: 'nord' });
+    assert.match((await err).message, /déjà prise/);
+    err = once(alice, 'error-msg');
+    alice.emit('change-seat', { position: 'foo' });
+    assert.match((await err).message, /invalide/);
+
+    const moved = once(alice, 'seat-changed');
+    const bobSees = new Promise((resolve) => {
+      bob.on('game-state', (st) => { if (st.players.est && st.players.est.name === 'Alice') resolve(st); });
+    });
+    alice.emit('change-seat', { position: 'est' });
+    const seat = await moved;
+    assert.strictEqual(seat.position, 'est');
+    assert.strictEqual(seat.sessionKey, sessionKey); // la session suit le joueur
+    const seen = await bobSees;
+    assert.strictEqual(seen.players.sud, undefined);
+    console.log('  ok  - changement de place vers un siège libre (refusé si pris ou invalide)');
+
+    // Reconnexion après déplacement : on retrouve la nouvelle place.
+    alice.close();
+    await wait(200);
+    const alice2 = await connect();
+    const back = once(alice2, 'room-reconnected');
+    alice2.emit('reconnect-room', { roomId, sessionKey });
+    assert.strictEqual((await back).position, 'est');
+    console.log('  ok  - reconnexion sur la nouvelle place');
+
+    // Partie lancée : plus de changement de place, même si un siège se libère.
+    // (Bob et Alice remplissent la salle avec 2 IA, puis Bob part.)
+    const started = new Promise((resolve) => {
+      alice2.on('game-state', (st) => { if (st.state === 'bidding') resolve(); });
+    });
+    alice2.emit('add-bot', {});
+    alice2.emit('add-bot', {});
+    await started;
+    bob.emit('leave-room');
+    await wait(200);
+    err = once(alice2, 'error-msg');
+    alice2.emit('change-seat', { position: 'nord' });
+    assert.match((await err).message, /partie lancée/);
+    console.log('  ok  - changement de place refusé une fois la partie lancée');
+
+    for (const s of [alice2, bob]) s.close();
     for (const s of [attacker, player, other, third]) s.close();
     assert.strictEqual(exited, null, 'le serveur s\'est arrêté');
     console.log('\nRobustesse serveur : OK');
