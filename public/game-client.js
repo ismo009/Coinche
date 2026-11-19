@@ -1120,11 +1120,16 @@ function showSeatPop(absPos, text, variant = 'bid', delayMs = 0) {
   if (delayMs > 0) setTimeout(show, delayMs); else show();
 }
 
-function showCenterBanner(text, variant = 'contract') {
+function showCenterBanner(text, variant = 'contract', subtitle = '') {
   document.querySelectorAll('.center-banner').forEach(el => el.remove());
   const banner = document.createElement('div');
   banner.className = `center-banner banner-${variant}`;
   banner.textContent = text;
+  if (subtitle) {
+    const sub = document.createElement('small');
+    sub.textContent = subtitle;
+    banner.appendChild(sub);
+  }
   banner.addEventListener('animationend', () => banner.remove());
   document.body.appendChild(banner);
   setTimeout(() => banner.remove(), 2400);
@@ -1168,22 +1173,40 @@ function playStateTransitionEffects(prev, next) {
   }
 
   // Nouvelles annonces.
+  let bigBannerShown = false;
   if (sameDeal && Array.isArray(next.bids) && Array.isArray(prev.bids) && next.bids.length > prev.bids.length) {
     for (const bid of next.bids.slice(prev.bids.length)) {
       if (!bid) continue;
-      if (bid.type === 'pass') showSeatPop(bid.player, 'Passe', 'pass');
-      else if (bid.type === 'coinche') showSeatPop(bid.player, 'COINCHE !', 'coinche');
-      else if (bid.type === 'surcoinche') showSeatPop(bid.player, 'SURCOINCHE !', 'surcoinche');
-      else if (bid.type === 'bid') showSeatPop(bid.player, `${shortBidLabel(bid.points)} ${SUIT_SHORT[bid.suit] || ''}`.trim(), 'bid');
+      const who = next.players?.[bid.player]?.name || '';
+      if (bid.type === 'pass') {
+        showSeatPop(bid.player, 'Passe', 'pass');
+      } else if (bid.type === 'coinche') {
+        showSeatPop(bid.player, 'COINCHE !', 'coinche');
+        showCenterBanner('COINCHE !', 'coinche', who);
+        bigBannerShown = true;
+      } else if (bid.type === 'surcoinche') {
+        showSeatPop(bid.player, 'SURCOINCHE !', 'surcoinche');
+        showCenterBanner('SURCOINCHE !', 'surcoinche', who);
+        bigBannerShown = true;
+      } else if (bid.type === 'bid') {
+        showSeatPop(bid.player, `${shortBidLabel(bid.points)} ${SUIT_SHORT[bid.suit] || ''}`.trim(), 'bid');
+        // Annonces spéciales : capot, capot beloté, générale.
+        const special = { 250: 'CAPOT !', 270: 'CAPOT BELOTÉ !', 500: 'GÉNÉRALE !' }[bid.points];
+        if (special) {
+          showCenterBanner(special, 'special', who);
+          bigBannerShown = true;
+        }
+      }
     }
   }
 
-  // Fin des enchères -> bannière du contrat.
+  // Fin des enchères -> bannière du contrat (après la bannière coinche/surcoinche le cas échéant).
   if (prev.state === 'bidding' && next.state === 'playing' && next.contract) {
     let text = `${shortBidLabel(next.contract.points)} ${SUIT_SHORT[next.contract.suit] || ''}`.trim();
     if (next.contract.surcoinched) text += ' ×3';
     else if (next.contract.coinched) text += ' ×2';
-    showCenterBanner(text, 'contract');
+    if (bigBannerShown) setTimeout(() => showCenterBanner(text, 'contract'), 1300);
+    else showCenterBanner(text, 'contract');
   }
 
   // Belote / Rebelote.
@@ -2323,13 +2346,14 @@ function updateBidding() {
   }
 
   // Coinche: only if opponent bid and no coinche yet
-  const canCoinche = isMyTurn && gameState.contract &&
+  // Coinche / surcoinche : possibles à tout moment des enchères, sans attendre son tour.
+  const canCoinche = !!gameState.contract &&
     getTeamFromPos(gameState.contract.player) !== getTeamFromPos(myPosition) &&
     !gameState.bids.some(b => b.type === 'coinche');
   document.getElementById('btn-coinche').disabled = !canCoinche;
 
   // Surcoinche
-  const canSurcoinche = isMyTurn &&
+  const canSurcoinche =
     gameState.bids.some(b => b.type === 'coinche') &&
     !gameState.bids.some(b => b.type === 'surcoinche') &&
     gameState.contract &&

@@ -71,6 +71,47 @@ test('générale surcoinchée : l\'annonceur entame aussi', () => {
   assert.strictEqual(g.currentPlayer, 'ouest');
 });
 
+test('coinche hors tour : un adversaire peut coincher sans attendre son tour', () => {
+  const g = newGame();
+  g.dealer = 'sud';
+  g.startNewRound(); // ouest ouvre
+  g.placeBid('ouest', { type: 'bid', points: 90, suit: 'trefle' });
+  assert.strictEqual(g.currentPlayer, 'nord');
+  // Est (partenaire d'ouest) ne peut pas coincher son partenaire.
+  assert.strictEqual(g.placeBid('est', { type: 'coinche' }).success, false);
+  // Sud (adversaire) coinche alors que c'est à Nord de parler.
+  const r = g.placeBid('sud', { type: 'coinche' });
+  assert.ok(r.success, r.error);
+  assert.strictEqual(g.coincheBy, 'sud');
+  assert.strictEqual(g.currentPlayer, 'ouest'); // la parole revient au joueur après le coincheur
+  // Une enchère ou un passe restent soumis au tour.
+  assert.strictEqual(g.placeBid('nord', { type: 'pass' }).success, false);
+  // Pas de double coinche.
+  assert.strictEqual(g.placeBid('nord', { type: 'coinche' }).success, false);
+  g.placeBid('ouest', { type: 'pass' });
+  g.placeBid('nord', { type: 'pass' });
+  const end = g.placeBid('est', { type: 'pass' });
+  assert.strictEqual(end.action, 'play');
+  assert.strictEqual(g.contract.coinched, true);
+  assert.strictEqual(g.contract.player, 'ouest');
+});
+
+test('surcoinche hors tour par l\'équipe coinchée ; coinche impossible sans enchère', () => {
+  const g = newGame();
+  g.dealer = 'sud';
+  g.startNewRound();
+  assert.strictEqual(g.placeBid('nord', { type: 'coinche' }).success, false); // aucune enchère
+  g.placeBid('ouest', { type: 'bid', points: 80, suit: 'pique' });
+  assert.ok(g.placeBid('nord', { type: 'coinche' }).success);
+  // Les adversaires (coincheurs) ne peuvent pas surcoincher.
+  assert.strictEqual(g.placeBid('sud', { type: 'surcoinche' }).success, false);
+  // Ouest surcoinche alors que c'est à Est de parler.
+  assert.strictEqual(g.currentPlayer, 'est');
+  const r = g.placeBid('ouest', { type: 'surcoinche' });
+  assert.strictEqual(r.action, 'play');
+  assert.strictEqual(g.contract.surcoinched, true);
+});
+
 test('dealId est incrémenté à chaque distribution et exposé au client', () => {
   const g = newGame();
   g.startNewRound();

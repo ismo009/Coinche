@@ -1811,6 +1811,59 @@ body.is-dealing .deal-deck {
 }
 
 .center-banner.banner-contract { background: var(--orange); border-color: var(--orange-dark); }
+.center-banner.banner-coinche { background: var(--orange); border-color: var(--orange-dark); }
+.center-banner.banner-surcoinche { background: var(--red); border-color: var(--red-dark); }
+.center-banner.banner-special { background: var(--purple); border-color: var(--purple-dark); }
+
+.center-banner small {
+  display: block;
+  margin-top: 2px;
+  font-size: 0.5em;
+  opacity: 0.9;
+}
+
+/* Coinche / surcoinche / annonces spéciales : effet "tampon" + secousse */
+.center-banner.banner-coinche,
+.center-banner.banner-surcoinche,
+.center-banner.banner-special {
+  font-size: clamp(38px, 10vw, 64px);
+  animation: banner-stamp 1.6s var(--ease-out) both;
+}
+
+@keyframes banner-stamp {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(2.6) rotate(-8deg);
+  }
+
+  12% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(0.92) rotate(-4deg);
+  }
+
+  16% {
+    transform: translate(calc(-50% - 8px), -50%) scale(1) rotate(-4deg);
+  }
+
+  20% {
+    transform: translate(calc(-50% + 8px), -50%) scale(1) rotate(-4deg);
+  }
+
+  24% {
+    transform: translate(calc(-50% - 4px), -50%) scale(1) rotate(-4deg);
+  }
+
+  28%,
+  80% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1) rotate(-4deg);
+  }
+
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(1.1) rotate(-4deg);
+  }
+}
 .center-banner.banner-success { background: var(--green); border-color: var(--green-dark); }
 .center-banner.banner-fail { background: var(--red); border-color: var(--red-dark); }
 
