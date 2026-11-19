@@ -43,6 +43,19 @@ Serveur disponible sur `http://localhost:3000`.
 - Historique des manches.
 - Affichage du dernier pli.
 - Panneaux d'interface deplacables sur desktop.
+- IA serveur (`ai/coinche-bot.js`) avec logique des appels (voir plus bas).
+- Animations legeres : distribution des cartes (3-2-3 depuis le paquet), arrivee des cartes
+  depuis le siege du joueur, mise en valeur du gagnant du pli, annonces au-dessus des sieges
+  (passe, enchere, coinche, belote, points du pli), bannieres de contrat / reussite / chute.
+- Interface mobile dediee : HUD fixe (scores, Pli, Histo, Chat), main en eventail sur une ligne,
+  encheres en feuille compacte au-dessus de la main (la main reste visible), mode paysage.
+- Theme visuel "arcade" (inspire de Balatro) : aplats, ombres dures, police pixel *Jersey 10*.
+
+## Performances
+
+- Animations uniquement en `transform` / `opacity` (composition GPU), pas de `backdrop-filter`.
+- `prefers-reduced-motion` respecte (animations desactivees).
+- Images optimisees : logo 512px (~90 Ko), cartes *Classic* 280px de large (~460 Ko pour le paquet).
 
 ## Regles de jeu (resume)
 
@@ -51,6 +64,7 @@ Serveur disponible sur `http://localhost:3000`.
 - Contrats: `80` a `160`, `250` (capot), `270` (capot belote), `500` (generale).
 - Atouts: `coeur`, `carreau`, `trefle`, `pique`, `tout-atout`, `sans-atout`.
 - Dernier pli: +10 points.
+- Generale (500) : l'annonceur entame obligatoirement le premier pli, meme si ce n'est pas son tour.
 - Belote/Rebelote: +20 points.
 - Score cible de partie: `2000` points.
 
@@ -82,12 +96,28 @@ Serveur disponible sur `http://localhost:3000`.
 | 8 | 0 |
 | 7 | 0 |
 
+## IA : logique des appels
+
+Convention utilisee par l'IA (et reconnue quand un humain la pratique) :
+
+- **Faire un appel** : lors de sa *premiere defausse* de la manche (on ne fournit pas la couleur
+  demandee et on ne coupe pas), jeter une **petite carte** (7, 8, 9... valeur 0) d'une couleur
+  indique au partenaire qu'on y est **maitre**. L'IA appelle dans une couleur ou elle detient la
+  carte maitresse et au moins une petite carte.
+- **Repondre a un appel** : quand le partenaire a appele, l'IA qui prend la main rejoue cette
+  couleur par sa plus petite carte (sauf si un adversaire chicane peut couper, ou si l'attaque
+  est encore en train de faire tomber les atouts).
+- **Lire les appels adverses** : l'IA evite d'entamer une couleur ou un adversaire a appele.
+- Un appel est consomme des que la couleur est rejouee.
+
 ## Structure du projet
 
 ```text
 .
 |-- game.js               # Moteur de jeu (regles, scoring, etats)
 |-- server.js             # Serveur Express + Socket.IO
+|-- ai/coinche-bot.js     # IA serveur (encheres, jeu de la carte, appels)
+|-- test/run-tests.js     # Tests de non-regression (regles + IA), sans dependance
 |-- package.json
 `-- public/
 	|-- index.html        # Structure de l'interface
@@ -100,6 +130,7 @@ Serveur disponible sur `http://localhost:3000`.
 ## Scripts
 
 - `npm start`: lance `node server.js`.
+- `npm test`: lance les tests de non-regression (regles, generale, appels de l'IA, parties completes).
 
 ## Personnalisation rapide
 

@@ -805,6 +805,95 @@ function chooseBid(game) {
   return { type: 'pass' };
 }
 
+
+// ============================================================
+// APPELS (signalisation entre partenaires)
+// ------------------------------------------------------------
+// Convention : lors de sa PREMIÈRE défausse de la manche (on ne fournit pas la
+// couleur demandée et on ne coupe pas), un joueur qui jette une petite carte
+// (valeur 0 : 7, 8, 9 hors atout...) d'une couleur annonce à son partenaire
+// qu'il est maître dans cette couleur. Le partenaire, quand il prend la main,
+// rejoue cette couleur (petite carte) pour que l'appelant fasse son pli.
+// L'appel est "consommé" dès que la couleur est rejouée après l'appel.
+// La détection se base uniquement sur l'historique public des cartes jouées :
+// elle s'applique donc aussi aux appels faits par des joueurs humains.
+// ============================================================
+
+function isLowSignalCard(card, trumpSuit) {
+  if (!card) return false;
+  if (SUITS.includes(trumpSuit) && card.suit === trumpSuit) return false;
+  return getCardValueForContract(card, trumpSuit) === 0;
+}
+
+function groupHistoryByTrick(history) {
+  const tricks = new Map();
+  for (const h of history || []) {
+    if (!h || !h.card) continue;
+    const key = `${h.roundNumber || 0}:${h.trickNumber || 0}`;
+    if (!tricks.has(key)) tricks.set(key, { trickNumber: h.trickNumber || 0, plays: [] });
+    tricks.get(key).plays.push(h);
+  }
+  const list = [...tricks.values()];
+  for (const t of list) t.plays.sort((a, b) => (a.indexInTrick || 0) - (b.indexInTrick || 0));
+  list.sort((a, b) => a.trickNumber - b.trickNumber);
+  return list;
+}
+
+/**
+ * Analyse l'historique de la manche.
+ * Retourne :
+ *  - signals: { [player]: { suit, card, trickNumber, active } }  (appel de chaque joueur)
+ *  - discarded: { [player]: true } joueurs ayant déjà défaussé au moins une fois
+ *  - voids: { [player]: Set(suit) } couleurs dont le joueur est connu chicane
+ */
+function analyzeSignals(history, trumpSuit) {
+  const signals = {};
+  const discarded = {};
+  const voids = {};
+  const isSuitContract = SUITS.includes(trumpSuit);
+
+  const tricks = groupHistoryByTrick(history);
+  for (const trick of tricks) {
+    const plays = trick.plays;
+    if (!plays.length) continue;
+    const ledSuit = plays[0].card.suit;
+
+    // Un appel est consommé dès que sa couleur est entamée après le pli de l'appel.
+    for (const p of Object.keys(signals)) {
+      const sig = signals[p];
+      if (sig.active && trick.trickNumber > sig.trickNumber && ledSuit === sig.suit) {
+        sig.active = false;
+      }
+    }
+
+    for (let i = 1; i < plays.length; i++) {
+      const play = plays[i];
+      if (play.card.suit === ledSuit) continue;
+
+      if (!voids[play.player]) voids[play.player] = new Set();
+      voids[play.player].add(ledSuit);
+
+      const isCut = isSuitContract && play.card.suit === trumpSuit;
+      if (isCut) continue;
+
+      // Défausse.
+      if (!discarded[play.player]) {
+        discarded[play.player] = true;
+        if (isLowSignalCard(play.card, trumpSuit)) {
+          signals[play.player] = {
+            suit: play.card.suit,
+            card: play.card,
+            trickNumber: trick.trickNumber,
+            active: true
+          };
+        }
+      }
+    }
+  }
+
+  return { signals, discarded, voids };
+}
+
 function chooseCard(game, position) {
   const hand = game.hands?.[position] || [];
   const trumpSuit = game.contract?.suit;
@@ -1069,6 +1158,122 @@ function chooseCard(game, position) {
     partnerCurrentlyMasterBeforeSelect &&
     hasNonTrumpAlternativeBeforeSelect;
 
+  // ---------------- Appels (signalisation partenaire) ----------------
+  const signalInfo = analyzeSignals(history, trumpSuit);
+  const partnerSignal = partnerPos ? signalInfo.signals[partnerPos] : null;
+  const activePartnerSignal = partnerSignal && partnerSignal.active ? partnerSignal : null;
+  const activeOpponentSignalSuits = new Set(
+    opponents
+      .map(p => signalInfo.signals[p])
+      .filter(sig => sig && sig.active)
+      .map(sig => sig.suit)
+  );
+
+  function cardOrderIndex(card) {
+    return getOrderForCardInContract(card).indexOf(card.rank);
+  }
+
+  function lowestCardOf(cards) {
+    let best = null;
+    for (const c of cards) {
+      if (!best || cardOrderIndex(c) < cardOrderIndex(best)) best = c;
+    }
+    return best;
+  }
+
+  function highestCardOf(cards) {
+    let best = null;
+    for (const c of cards) {
+      if (!best || cardOrderIndex(c) > cardOrderIndex(best)) best = c;
+    }
+    return best;
+  }
+
+  const iHoldLedSuit = !!ledSuitBeforeSelect && hand.some(c => c.suit === ledSuitBeforeSelect);
+  // Cartes de défausse possibles : ni la couleur demandée, ni de l'atout (contrat couleur).
+  const discardOptions = !isLeadingNewTrick && !iHoldLedSuit
+    ? playable.filter(c =>
+      c.suit !== ledSuitBeforeSelect &&
+      !(isSuitTrumpContract && c.suit === trumpSuit))
+    : [];
+  const isMyFirstDiscard = discardOptions.length > 0 && !signalInfo.discarded[position];
+
+  // 1) Émettre un appel : première défausse, couleur dont je possède la carte maîtresse
+  //    et au moins une petite carte à jeter (je garde la maîtresse pour plus tard).
+  let appelCard = null;
+  if (isMyFirstDiscard) {
+    let bestAppelScore = -Infinity;
+    for (const suit of SUITS) {
+      if (suit === ledSuitBeforeSelect) continue;
+      if (isSuitTrumpContract && suit === trumpSuit) continue;
+      const inSuit = hand.filter(c => c.suit === suit);
+      if (inSuit.length < 2) continue;
+      const top = highestCardOf(inSuit);
+      if (countUnseenStrongerCards(top) !== 0) continue;
+      const low = lowestCardOf(inSuit);
+      if (!isLowSignalCard(low, trumpSuit)) continue;
+      if (!discardOptions.some(c => cardEquals(c, low))) continue;
+      // Une couleur avec plusieurs maîtresses / plus longue rapporte davantage.
+      const secondMaster = inSuit.filter(c => !cardEquals(c, top) && countUnseenStrongerCards(c) <= 1).length;
+      const appelScore = getCardValueForContract(top, trumpSuit) + secondMaster * 6 + inSuit.length * 2;
+      if (appelScore > bestAppelScore) {
+        bestAppelScore = appelScore;
+        appelCard = low;
+      }
+    }
+  }
+
+  // 2) Répondre à l'appel du partenaire quand je prends la main.
+  let appelResponseSuit = null;
+  if (isLeadingNewTrick && activePartnerSignal) {
+    const suit = activePartnerSignal.suit;
+    const mine = playable.filter(c => c.suit === suit);
+    // Inutile de rejouer la couleur si un adversaire, chicane, peut couper.
+    const opponentMayCut =
+      isSuitTrumpContract &&
+      opponents.some(p =>
+        signalInfo.voids[p] && signalInfo.voids[p].has(suit) &&
+        !knownNoTrump[p] && (cardsLeft[p] || 0) > 0);
+    if (mine.length > 0 && !opponentMayCut) appelResponseSuit = suit;
+  }
+  const attackStillPullingTrumps = iAmAttack && (shouldForceTrumpLeadAtFirstTrick || shouldPullTrumpsNow);
+  const followPartnerAppel = !!appelResponseSuit && !attackStillPullingTrumps;
+  const appelResponseCard = followPartnerAppel
+    ? lowestCardOf(playable.filter(c => c.suit === appelResponseSuit))
+    : null;
+
+  function computeSignalAdjustment(card) {
+    let adj = 0;
+
+    // Rejouer la couleur appelée par la plus petite carte (le partenaire est maître).
+    if (appelResponseCard && cardEquals(card, appelResponseCard)) adj += 14;
+
+    // Ne pas entamer une couleur où un adversaire a fait un appel (il y est maître).
+    if (isLeadingNewTrick && activeOpponentSignalSuits.has(card.suit) && countUnseenStrongerCards(card) !== 0) {
+      adj -= 9;
+    }
+
+    if (discardOptions.length > 0 && discardOptions.some(c => cardEquals(c, card))) {
+      // Garder au moins une carte dans la couleur appelée par le partenaire pour pouvoir la rejouer.
+      if (activePartnerSignal && card.suit === activePartnerSignal.suit &&
+        hand.filter(c => c.suit === card.suit).length === 1) {
+        adj -= 10;
+      }
+
+      // Éviter un "faux appel" : en première défausse sans couleur maîtresse, préférer
+      // jeter une petite figure plutôt qu'une petite carte qui serait lue comme un appel.
+      if (isMyFirstDiscard && !appelCard && partnerCurrentlyMasterBeforeSelect && isLowSignalCard(card, trumpSuit)) {
+        const neutralAlternative = discardOptions.some(c =>
+          !isLowSignalCard(c, trumpSuit) &&
+          getCardValueForContract(c, trumpSuit) <= 4 &&
+          countUnseenStrongerCards(c) !== 0);
+        if (neutralAlternative) adj -= 7;
+      }
+    }
+
+    return adj;
+  }
+
   const fullDeck = buildDeck();
   const knownCards = [...hand, ...alreadyPlayed];
   const unknownCards = removeCardsFromDeck(fullDeck, knownCards);
@@ -1139,6 +1344,7 @@ function chooseCard(game, position) {
 
   function evaluateCandidate(card) {
     let total = 0;
+    const signalAdjustment = computeSignalAdjustment(card);
     const currentTrickBeforePlay = Array.isArray(game.currentTrick) ? game.currentTrick : [];
     const ledSuitNow = currentTrickBeforePlay.length > 0 ? currentTrickBeforePlay[0].card.suit : null;
     const winnerBeforePlay = currentTrickBeforePlay.length > 0
@@ -1391,6 +1597,7 @@ function chooseCard(game, position) {
       utility += firstTrickTrumpPressure;
       utility += overtrumpRiskBonus;
       utility += createFutureCutBonus;
+      utility += signalAdjustment;
 
       total += utility;
     }
@@ -1398,7 +1605,13 @@ function chooseCard(game, position) {
     return total / sampleCount;
   }
 
-  const candidateCards = shouldDiscardWhenPartnerMaster
+  // Priorité aux appels : on émet l'appel tel quel ; on répond à l'appel du partenaire
+  // en restant dans la couleur appelée (le choix de la carte est ensuite évalué).
+  if (appelCard) return appelCard;
+
+  const candidateCards = followPartnerAppel
+    ? playable.filter(c => c.suit === appelResponseSuit)
+    : shouldDiscardWhenPartnerMaster
     ? playable.filter(c => c.suit !== trumpSuit)
     : shouldForceTrumpLeadAtFirstTrick
       ? playable.filter(c => c.suit === trumpSuit)
@@ -1427,5 +1640,6 @@ function chooseCard(game, position) {
 
 module.exports = {
   chooseBid,
-  chooseCard
+  chooseCard,
+  analyzeSignals
 };
