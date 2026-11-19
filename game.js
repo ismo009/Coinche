@@ -405,6 +405,11 @@ class CoincheGame {
     this.roundHistory = [];
     this.roundNumber = 0;
 
+    // Identifiant de donne (incrémenté à chaque distribution) : permet au client
+    // de déclencher l'animation de distribution une seule fois par donne.
+    this.dealId = 0;
+    this.dealStartedAt = 0;
+
     // Historique détaillé des cartes jouées (utile pour IA serveur)
     // Chaque entrée: { roundNumber, trickNumber, indexInTrick, player, card, contractSuit }
     this.playHistory = [];
@@ -460,14 +465,14 @@ class CoincheGame {
     // On démarre un nouvel historique de manche
     this.playHistory = [];
 
+    this.dealId++;
+    this.dealStartedAt = Date.now();
+
     // Le joueur après le donneur commence les enchères
     this.currentPlayer = getNextPlayer(this.dealer);
     this.state = 'bidding';
 
-    // Vérifier la belote pour chaque joueur (sera annoncée plus tard)
-    for (const pos of POSITIONS) {
-      // On ne peut pas checker la belote pendant les enchères car on ne connaît pas l'atout
-    }
+    // Note: la belote est détectée au début du jeu (startPlaying), une fois l'atout connu.
 
     return true;
   }
@@ -574,7 +579,11 @@ class CoincheGame {
     if (this.surcoincheBy) this.contract.surcoinched = true;
 
     this.state = 'playing';
-    this.currentPlayer = getNextPlayer(this.dealer);
+    // Règle de la générale : le joueur qui l'a annoncée entame obligatoirement le
+    // premier pli, même si ce n'est pas son tour. Sinon, le joueur après le donneur entame.
+    this.currentPlayer = this.contract.points === 500
+      ? this.contract.player
+      : getNextPlayer(this.dealer);
     this.trickNumber = 1;
 
     // Vérifier belote (peut être multiple en tout-atout)
@@ -831,6 +840,7 @@ class CoincheGame {
       players: {},
       scores: this.scores,
       dealer: this.dealer,
+      dealId: this.dealId,
       currentPlayer: this.currentPlayer,
       contract: this.contract,
       trickNumber: this.trickNumber,

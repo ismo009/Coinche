@@ -322,6 +322,11 @@ function addBotAtPosition(roomId, game, position, botName = 'IA') {
   return { success: true };
 }
 
+// Durées alignées sur les animations client (public/game-client.js).
+const BOT_TURN_DELAY_MS = 450;
+const BOT_AFTER_TRICK_DELAY_MS = 900;
+const DEAL_ANIMATION_MS = 1500;
+
 function maybeProcessBotTurn(roomId) {
   const game = games.get(roomId);
   if (!game) return;
@@ -332,6 +337,15 @@ function maybeProcessBotTurn(roomId) {
   if (!isBotPlayer(player)) return;
 
   // Small delay to keep UX smooth and avoid tight recursion.
+  // - pendant la distribution, on laisse l'animation client se terminer avant que l'IA annonce;
+  // - juste après un pli, on laisse le temps au ramassage du pli d'être visible.
+  let delay = BOT_TURN_DELAY_MS;
+  if (game.state === 'bidding' && game.dealStartedAt) {
+    delay = Math.max(delay, game.dealStartedAt + DEAL_ANIMATION_MS - Date.now());
+  } else if (game.state === 'playing' && (game.currentTrick?.length || 0) === 0 && game.trickNumber > 1) {
+    delay = BOT_AFTER_TRICK_DELAY_MS;
+  }
+
   setTimeout(() => {
     const latest = games.get(roomId);
     if (!latest) return;
@@ -406,7 +420,7 @@ function maybeProcessBotTurn(roomId) {
       touchRoom(roomId);
       maybeProcessBotTurn(roomId);
     }
-  }, 450);
+  }, delay);
 }
 
 function pickRandom(arr) {
