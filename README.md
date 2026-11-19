@@ -65,6 +65,8 @@ Serveur disponible sur `http://localhost:3000`.
 - Atouts: `coeur`, `carreau`, `trefle`, `pique`, `tout-atout`, `sans-atout`.
 - Dernier pli: +10 points.
 - Generale (500) : l'annonceur entame obligatoirement le premier pli, meme si ce n'est pas son tour.
+- Coinche / surcoinche : peuvent s'annoncer a tout moment des encheres, sans attendre son tour
+  (la coinche par un adversaire de l'equipe qui a annonce, la surcoinche par l'equipe coinchee).
 - Belote/Rebelote: +20 points.
 - Score cible de partie: `2000` points.
 

@@ -346,7 +346,11 @@ function maybeProcessBotTurn(roomId) {
     delay = BOT_AFTER_TRICK_DELAY_MS;
   }
 
-  setTimeout(() => {
+  // Un seul tour d'IA programmé par partie : une coinche hors tour peut changer le joueur
+  // courant alors qu'un tour d'IA est déjà en attente (évite les doubles déclenchements).
+  if (game.botTurnTimer) clearTimeout(game.botTurnTimer);
+  game.botTurnTimer = setTimeout(() => {
+    game.botTurnTimer = null;
     const latest = games.get(roomId);
     if (!latest) return;
 

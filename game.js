@@ -479,7 +479,15 @@ class CoincheGame {
 
   placeBid(playerPosition, bid) {
     if (this.state !== 'bidding') return { success: false, error: 'Pas en phase d\'enchères' };
-    if (playerPosition !== this.currentPlayer) return { success: false, error: 'Ce n\'est pas votre tour' };
+    if (!bid || typeof bid !== 'object') return { success: false, error: 'Action invalide' };
+
+    // La coinche (et la surcoinche en réponse) peut s'annoncer à tout moment des enchères,
+    // sans attendre son tour : dès qu'on estime que l'adversaire ne fera pas son contrat.
+    // Les enchères et les "passe" restent soumis au tour de parole.
+    const outOfTurnAllowed = bid.type === 'coinche' || bid.type === 'surcoinche';
+    if (!outOfTurnAllowed && playerPosition !== this.currentPlayer) {
+      return { success: false, error: 'Ce n\'est pas votre tour' };
+    }
 
     if (bid.type === 'pass') {
       this.passCount++;
