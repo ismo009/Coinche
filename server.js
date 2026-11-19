@@ -136,9 +136,40 @@ function generatePlayerSessionKey() {
   return crypto.randomBytes(12).toString('hex');
 }
 
+// ============================================================
+// Validation des données reçues des clients
+// Un client peut envoyer n'importe quoi (undefined, nombre, tableau...) : on ne fait
+// jamais confiance à la forme d'un message.
+// ============================================================
+
+function asObject(data) {
+  return data && typeof data === 'object' && !Array.isArray(data) ? data : {};
+}
+
+// Caractères de contrôle et de contrôle bidirectionnel (évite les noms "invisibles"
+// ou qui inversent l'affichage du texte voisin).
+const UNSAFE_TEXT_CHARS = /[\u0000-\u001f\u007f-\u009f\u200b-\u200f\u202a-\u202e\u2066-\u2069\ufeff]/g;
+
+function sanitizeText(raw, maxLength) {
+  if (typeof raw !== 'string') return '';
+  return raw.replace(UNSAFE_TEXT_CHARS, '').replace(/\s+/g, ' ').trim().slice(0, maxLength);
+}
+
+function sanitizePlayerName(raw, fallback = 'Joueur') {
+  return sanitizeText(raw, 20) || fallback;
+}
+
 function sanitizeRoomName(name) {
-  if (typeof name !== 'string') return '';
-  return name.replace(/\s+/g, ' ').trim().slice(0, 28);
+  return sanitizeText(name, 28);
+}
+
+function sanitizeRoomCode(raw) {
+  if (typeof raw !== 'string') return '';
+  return raw.trim().toUpperCase().slice(0, 64);
+}
+
+function sanitizePosition(raw) {
+  return typeof raw === 'string' && POSITIONS.includes(raw) ? raw : null;
 }
 
 function generateRoomName() {
@@ -304,7 +335,7 @@ function addBotAtPosition(roomId, game, position, botName = 'IA') {
   if (!POSITIONS.includes(position)) return { success: false, error: 'Position invalide.' };
   if (game.players[position]) return { success: false, error: `La position ${positionLabelFr(position)} est déjà occupée.` };
 
-  const safeName = (botName || 'IA').toString().slice(0, 20);
+  const safeName = sanitizePlayerName(typeof botName === 'string' ? botName : '', 'IA');
   const botId = `BOT:${crypto.randomBytes(6).toString('hex')}`;
   game.players[position] = { id: botId, name: safeName, isBot: true, connected: true };
 
@@ -351,80 +382,88 @@ function maybeProcessBotTurn(roomId) {
   if (game.botTurnTimer) clearTimeout(game.botTurnTimer);
   game.botTurnTimer = setTimeout(() => {
     game.botTurnTimer = null;
-    const latest = games.get(roomId);
-    if (!latest) return;
-
-    const pos = latest.currentPlayer;
-    const p = latest.players[pos];
-    if (!isBotPlayer(p)) return;
-
-    if (latest.state === 'bidding') {
-      const bid = botLogic.chooseBid(latest);
-      const result = latest.placeBid(pos, bid);
-      if (result?.success) {
-        const botName = p.name || 'IA';
-        if (bid.type === 'coinche') {
-          broadcastMessage(roomId, `${botName} COINCHE !`, 'warning');
-        } else if (bid.type === 'surcoinche') {
-          broadcastMessage(roomId, `${botName} SURCOINCHE !`, 'danger');
-        }
-
-        if (result.action === 'redistribute') {
-          broadcastMessage(roomId, 'Tout le monde passe. Redistribution des cartes.', 'info');
-          latest.startNewRound();
-        }
-
-        if (result.action === 'play') {
-          const suitName = suitNames[latest.contract.suit] || latest.contract.suit;
-          const bidderName = getSafePlayerName(latest, latest.contract.player);
-          let msg = `Contrat: ${formatBidPoints(latest.contract.points)} ${suitName} par ${bidderName}`;
-          if (latest.contract.coinched) msg += ' (COINCHÉ)';
-          if (latest.contract.surcoinched) msg += ' (SURCOINCÉ)';
-          broadcastMessage(roomId, msg, 'success');
-        }
-
-        broadcastGameState(roomId);
-        touchRoom(roomId);
-        maybeProcessBotTurn(roomId);
-      }
-      return;
+    try {
+      runBotTurn(roomId);
+    } catch (err) {
+      console.error(`[bot] erreur dans la salle ${roomId}:`, err);
     }
+  }, delay);
+}
 
-    if (latest.state === 'playing') {
-      const card = botLogic.chooseCard(latest, pos);
-      if (!card) return;
+function runBotTurn(roomId) {
+  const latest = games.get(roomId);
+  if (!latest) return;
 
-      const result = latest.playCard(pos, card);
-      if (!result?.success) return;
+  const pos = latest.currentPlayer;
+  const p = latest.players[pos];
+  if (!isBotPlayer(p)) return;
 
+  if (latest.state === 'bidding') {
+    const bid = botLogic.chooseBid(latest);
+    const result = latest.placeBid(pos, bid);
+    if (result?.success) {
       const botName = p.name || 'IA';
-
-      if (result.beloteAnnounce) {
-        broadcastMessage(roomId, `${botName}: ${result.beloteAnnounce} !`, 'success');
+      if (bid.type === 'coinche') {
+        broadcastMessage(roomId, `${botName} COINCHE !`, 'warning');
+      } else if (bid.type === 'surcoinche') {
+        broadcastMessage(roomId, `${botName} SURCOINCHE !`, 'danger');
       }
 
-        if (result.action === 'trick_complete') {
-          const winnerName = getSafePlayerName(latest, result.winner);
-          broadcastMessage(roomId, `${winnerName} remporte le pli (+${result.points} pts)`);
-        }
-        if (result.action === 'round_end' || result.action === 'game_over') {
-        const rr = result.roundResult;
-        let msg = rr.contractMet ? '✓ Contrat réussi !' : '✗ Contrat chuté !';
-        msg += ` | NS: +${rr.scoreNS} | EO: +${rr.scoreEO}`;
-        broadcastMessage(roomId, msg, rr.contractMet ? 'success' : 'danger');
+      if (result.action === 'redistribute') {
+        broadcastMessage(roomId, 'Tout le monde passe. Redistribution des cartes.', 'info');
+        latest.startNewRound();
+      }
 
-        if (result.action === 'game_over') {
-          const teamNames = { ns: 'Nord-Sud', eo: 'Est-Ouest' };
-          const winnerTeam = teamNames[result.winner];
-          broadcastMessage(roomId, `🏆 ${winnerTeam} remporte la partie !`, 'success');
-        }
+      if (result.action === 'play') {
+        const suitName = suitNames[latest.contract.suit] || latest.contract.suit;
+        const bidderName = getSafePlayerName(latest, latest.contract.player);
+        let msg = `Contrat: ${formatBidPoints(latest.contract.points)} ${suitName} par ${bidderName}`;
+        if (latest.contract.coinched) msg += ' (COINCHÉ)';
+        if (latest.contract.surcoinched) msg += ' (SURCOINCÉ)';
+        broadcastMessage(roomId, msg, 'success');
       }
 
       broadcastGameState(roomId);
       touchRoom(roomId);
       maybeProcessBotTurn(roomId);
     }
-  }, delay);
+    return;
+  }
+
+  if (latest.state === 'playing') {
+    const card = botLogic.chooseCard(latest, pos);
+    if (!card) return;
+
+    const result = latest.playCard(pos, card);
+    if (!result?.success) return;
+
+    const botName = p.name || 'IA';
+
+    if (result.beloteAnnounce) {
+      broadcastMessage(roomId, `${botName}: ${result.beloteAnnounce} !`, 'success');
+    }
+
+      if (result.action === 'trick_complete') {
+        const winnerName = getSafePlayerName(latest, result.winner);
+        broadcastMessage(roomId, `${winnerName} remporte le pli (+${result.points} pts)`);
+      }
+      if (result.action === 'round_end' || result.action === 'game_over') {
+      const rr = result.roundResult;
+      let msg = rr.contractMet ? '✓ Contrat réussi !' : '✗ Contrat chuté !';
+      msg += ` | NS: +${rr.scoreNS} | EO: +${rr.scoreEO}`;
+      broadcastMessage(roomId, msg, rr.contractMet ? 'success' : 'danger');
+
+      if (result.action === 'game_over') {
+        const teamNames = { ns: 'Nord-Sud', eo: 'Est-Ouest' };
+        const winnerTeam = teamNames[result.winner];
+        broadcastMessage(roomId, `🏆 ${winnerTeam} remporte la partie !`, 'success');
+      }
+    }
+
+    broadcastGameState(roomId);
+    touchRoom(roomId);
+    maybeProcessBotTurn(roomId);
+  }
 }
 
 function pickRandom(arr) {
@@ -489,20 +528,35 @@ io.on('connection', (socket) => {
   let playerName = null;
   let requestedTexturePack = null;
 
+  // Toute réception passe par ce wrapper : la donnée est normalisée en objet et une
+  // exception dans un handler est journalisée au lieu d'arrêter le serveur (et toutes les parties).
+  const on = (event, handler) => {
+    socket.on(event, (data, ...rest) => {
+      try {
+        handler(event === 'disconnect' ? data : asObject(data), ...rest);
+      } catch (err) {
+        console.error(`[socket:${event}] message rejeté de ${socket.id}:`, err);
+        if (event !== 'disconnect') {
+          socket.emit('error-msg', { message: 'Action invalide.' });
+        }
+      }
+    });
+  };
+
   socket.emit('texture-pack-options', getTexturePackOptionsPayload());
 
-  socket.on('get-texture-packs', () => {
+  on('get-texture-packs', () => {
     socket.emit('texture-pack-options', getTexturePackOptionsPayload());
   });
 
-  socket.on('create-room', (data) => {
+  on('create-room', (data) => {
     const roomId = generateRoomCode();
     const game = new CoincheGame(roomId);
     games.set(roomId, game);
     requestedTexturePack = resolveRequestedTexturePack(data);
 
-    playerName = (data.name || 'Joueur').slice(0, 20);
-    const position = data.position || 'sud';
+    playerName = sanitizePlayerName(data.name);
+    const position = sanitizePosition(data.position) || 'sud';
 
     if (!game.addPlayer(socket.id, playerName, position)) {
       socket.emit('error-msg', { message: 'Position déjà prise' });
@@ -526,8 +580,8 @@ io.on('connection', (socket) => {
     touchRoom(roomId);
   });
 
-  socket.on('join-room', (data) => {
-    const roomId = (data.roomId || '').toUpperCase().trim();
+  on('join-room', (data) => {
+    const roomId = sanitizeRoomCode(data.roomId);
     const game = games.get(roomId);
     requestedTexturePack = resolveRequestedTexturePack(data);
 
@@ -541,10 +595,10 @@ io.on('connection', (socket) => {
       return;
     }
 
-    playerName = (data.name || 'Joueur').slice(0, 20);
-    const position = data.position;
+    playerName = sanitizePlayerName(data.name);
+    const position = sanitizePosition(data.position);
 
-    if (!position || !POSITIONS.includes(position)) {
+    if (!position) {
       socket.emit('error-msg', { message: 'Position invalide' });
       return;
     }
@@ -647,9 +701,9 @@ io.on('connection', (socket) => {
     startIfRoomReady(roomId, game);
   }
 
-  socket.on('create-public-room', (data) => {
+  on('create-public-room', (data) => {
     requestedTexturePack = resolveRequestedTexturePack(data);
-    playerName = (data?.name || 'Joueur').slice(0, 20);
+    playerName = sanitizePlayerName(data.name);
     const room = createPublicRoom();
     // Owner = creator (first human).
     room.game.ownerId = socket.id;
@@ -657,10 +711,10 @@ io.on('connection', (socket) => {
     addSocketToPublicRoom({ createIfMissing: false, preferredRoomId: room.roomId, createdByPlayer: true });
   });
 
-  socket.on('reconnect-room', (data) => {
+  on('reconnect-room', (data) => {
     requestedTexturePack = resolveRequestedTexturePack(data);
-    const roomId = (data?.roomId || '').toString().toUpperCase().trim();
-    const sessionKey = (data?.sessionKey || '').toString().trim();
+    const roomId = sanitizeRoomCode(data.roomId);
+    const sessionKey = typeof data.sessionKey === 'string' ? data.sessionKey.trim().slice(0, 64) : '';
     if (!roomId || !sessionKey) {
       socket.emit('reconnect-failed', { roomId });
       socket.emit('error-msg', { message: 'Reconnexion impossible (session manquante).' });
@@ -710,7 +764,7 @@ io.on('connection', (socket) => {
     maybeProcessBotTurn(roomId);
   });
 
-  socket.on('add-bot', (data) => {
+  on('add-bot', (data) => {
     if (!currentRoom) return;
     const game = games.get(currentRoom);
     if (!game) return;
@@ -732,31 +786,31 @@ io.on('connection', (socket) => {
       return;
     }
 
-    const result = addBotAtPosition(currentRoom, game, position, data?.name || 'IA');
+    const result = addBotAtPosition(currentRoom, game, position, sanitizePlayerName(data.name, 'IA'));
     if (!result.success) {
       socket.emit('error-msg', { message: result.error || 'Impossible d\'ajouter une IA.' });
     }
   });
 
-  socket.on('join-public-room', (data) => {
+  on('join-public-room', (data) => {
     requestedTexturePack = resolveRequestedTexturePack(data);
-    playerName = (data?.name || 'Joueur').slice(0, 20);
-    const roomId = (data?.roomId || '').toUpperCase().trim();
+    playerName = sanitizePlayerName(data.name);
+    const roomId = sanitizeRoomCode(data.roomId);
     addSocketToPublicRoom({ createIfMissing: false, preferredRoomId: roomId || null });
   });
 
-  socket.on('list-public-rooms', () => {
+  on('list-public-rooms', () => {
     socket.emit('public-rooms', { rooms: getPublicRoomList() });
   });
 
-  socket.on('quick-play', (data) => {
+  on('quick-play', (data) => {
     // Alias historique: quick-play = rejoindre public, ou créer si aucune salle ouverte.
     requestedTexturePack = resolveRequestedTexturePack(data);
-    playerName = (data?.name || 'Joueur').slice(0, 20);
+    playerName = sanitizePlayerName(data.name);
     addSocketToPublicRoom({ createIfMissing: true, preferredRoomId: null });
   });
 
-  socket.on('bid', (data) => {
+  on('bid', (data) => {
     if (!currentRoom) return;
     const game = games.get(currentRoom);
     if (!game) return;
@@ -764,16 +818,17 @@ io.on('connection', (socket) => {
     const position = game.getPlayerPosition(socket.id);
     if (!position) return;
 
-    const result = game.placeBid(position, data);
+    const bid = { type: data.type, points: data.points, suit: data.suit };
+    const result = game.placeBid(position, bid);
 
     if (!result.success) {
       socket.emit('error-msg', { message: result.error });
       return;
     }
 
-    if (data.type === 'coinche') {
+    if (bid.type === 'coinche') {
       broadcastMessage(currentRoom, `${playerName} COINCHE !`, 'warning');
-    } else if (data.type === 'surcoinche') {
+    } else if (bid.type === 'surcoinche') {
       broadcastMessage(currentRoom, `${playerName} SURCOINCHE !`, 'danger');
     }
 
@@ -796,7 +851,7 @@ io.on('connection', (socket) => {
     maybeProcessBotTurn(currentRoom);
   });
 
-  socket.on('play-card', (data) => {
+  on('play-card', (data) => {
     if (!currentRoom) return;
     const game = games.get(currentRoom);
     if (!game) return;
@@ -804,7 +859,12 @@ io.on('connection', (socket) => {
     const position = game.getPlayerPosition(socket.id);
     if (!position) return;
 
-    const result = game.playCard(position, data.card);
+    const card = asObject(data.card);
+    if (typeof card.suit !== 'string' || typeof card.rank !== 'string') {
+      socket.emit('error-msg', { message: 'Carte invalide' });
+      return;
+    }
+    const result = game.playCard(position, { suit: card.suit, rank: card.rank });
 
     if (!result.success) {
       socket.emit('error-msg', { message: result.error });
@@ -837,7 +897,7 @@ io.on('connection', (socket) => {
     maybeProcessBotTurn(currentRoom);
   });
 
-  socket.on('next-round', () => {
+  on('next-round', () => {
     if (!currentRoom) return;
     const game = games.get(currentRoom);
     if (!game) return;
@@ -850,7 +910,7 @@ io.on('connection', (socket) => {
     maybeProcessBotTurn(currentRoom);
   });
 
-  socket.on('new-game', () => {
+  on('new-game', () => {
     if (!currentRoom) return;
     const game = games.get(currentRoom);
     if (!game) return;
@@ -867,7 +927,7 @@ io.on('connection', (socket) => {
     maybeProcessBotTurn(currentRoom);
   });
 
-  socket.on('leave-room', () => {
+  on('leave-room', () => {
     if (!currentRoom) {
       socket.emit('room-left', { roomId: null });
       return;
@@ -908,8 +968,8 @@ io.on('connection', (socket) => {
     socket.emit('room-left', { roomId, position });
   });
 
-  socket.on('get-available-positions', (data) => {
-    const roomId = (data.roomId || '').toUpperCase().trim();
+  on('get-available-positions', (data) => {
+    const roomId = sanitizeRoomCode(data.roomId);
     const game = games.get(roomId);
 
     if (!game) {
@@ -921,7 +981,7 @@ io.on('connection', (socket) => {
     socket.emit('available-positions', { positions: available });
   });
 
-  socket.on('chat-message', (data) => {
+  on('chat-message', (data) => {
     if (!currentRoom) return;
     const game = games.get(currentRoom);
     if (!game) return;
@@ -1094,7 +1154,7 @@ io.on('connection', (socket) => {
     touchRoom(currentRoom);
   });
 
-  socket.on('disconnect', () => {
+  on('disconnect', () => {
     console.log(`Joueur déconnecté: ${socket.id}`);
     if (currentRoom) {
       const game = games.get(currentRoom);

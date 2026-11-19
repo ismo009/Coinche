@@ -1699,10 +1699,14 @@ function renderPublicRooms(rooms) {
 
     const meta = document.createElement('div');
     meta.className = 'public-room-meta';
-    meta.innerHTML = `
-      <div class="public-room-title">${room.roomName || room.displayCode || room.roomId}</div>
-      <div class="public-room-subtitle">${room.playerCount}/4 joueurs · ${room.freeSeats} place(s) libre(s)</div>
-    `;
+    // Le nom de salle est choisi par un joueur : texte uniquement, jamais en HTML.
+    const title = document.createElement('div');
+    title.className = 'public-room-title';
+    title.textContent = String(room.roomName || room.displayCode || room.roomId || '');
+    const subtitle = document.createElement('div');
+    subtitle.className = 'public-room-subtitle';
+    subtitle.textContent = `${Number(room.playerCount) || 0}/4 joueurs · ${Number(room.freeSeats) || 0} place(s) libre(s)`;
+    meta.append(title, subtitle);
 
     const joinBtn = document.createElement('button');
     joinBtn.className = 'btn btn-secondary btn-sm';
@@ -2316,19 +2320,24 @@ function updateBidding() {
     for (const bid of gameState.bids) {
       const div = document.createElement('div');
       const name = gameState.players[bid.player] ? gameState.players[bid.player].name : posNames[bid.player];
+      let label = '';
       if (bid.type === 'pass') {
         div.className = 'bid-entry';
-        div.innerHTML = `<strong>${name}</strong> passe`;
+        label = 'passe';
       } else if (bid.type === 'coinche') {
         div.className = 'bid-entry coinche';
-        div.innerHTML = `<strong>${name}</strong> COINCHE !`;
+        label = 'COINCHE !';
       } else if (bid.type === 'surcoinche') {
         div.className = 'bid-entry surcoinche';
-        div.innerHTML = `<strong>${name}</strong> SURCOINCHE !`;
+        label = 'SURCOINCHE !';
       } else if (bid.type === 'bid') {
         div.className = 'bid-entry is-bid';
-        div.innerHTML = `<strong>${name}</strong> ${formatBidPoints(bid.points)} ${suitNames[bid.suit] || bid.suit}`;
+        label = `${formatBidPoints(bid.points)} ${suitNames[bid.suit] || bid.suit}`;
       }
+      // Le nom vient d'un autre joueur : toujours en texte, jamais en HTML.
+      const strong = document.createElement('strong');
+      strong.textContent = String(name ?? '');
+      div.append(strong, ` ${label}`);
       history.appendChild(div);
     }
     history.scrollTop = history.scrollHeight;

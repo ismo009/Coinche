@@ -609,9 +609,15 @@ class CoincheGame {
     if (this.state !== 'playing') return { success: false, error: 'Pas en phase de jeu' };
     if (playerPosition !== this.currentPlayer) return { success: false, error: 'Ce n\'est pas votre tour' };
 
+    if (!card || typeof card.suit !== 'string' || typeof card.rank !== 'string') {
+      return { success: false, error: 'Carte invalide' };
+    }
+
     const hand = this.hands[playerPosition];
     const cardIndex = hand.findIndex(c => cardEquals(c, card));
     if (cardIndex === -1) return { success: false, error: 'Vous n\'avez pas cette carte' };
+    // On utilise la carte du serveur (jamais l'objet envoyé par le client).
+    card = { suit: hand[cardIndex].suit, rank: hand[cardIndex].rank };
 
     // Vérifier que la carte est jouable
     const playable = getPlayableCardsWithPlayer(hand, this.currentTrick, this.contract.suit, playerPosition);
