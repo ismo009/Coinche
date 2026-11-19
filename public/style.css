@@ -763,6 +763,35 @@ select option:disabled {
   background: var(--team-eo);
 }
 
+/* Siège libre : cliquable pour s'y placer */
+.player-slot.free {
+  cursor: pointer;
+  transition: border-color 0.15s ease, background-color 0.15s ease, transform 0.15s var(--ease-pop);
+}
+
+.player-slot.free .slot-name {
+  color: var(--text-muted);
+  font-weight: 600;
+  font-size: 12px;
+}
+
+.player-slot.free:hover,
+.player-slot.free:focus-visible {
+  border-color: var(--gold);
+  background: var(--panel-3);
+  transform: translateY(-2px);
+}
+
+.player-slot.free:active {
+  transform: translateY(1px);
+}
+
+/* Ma place */
+.player-slot.mine {
+  outline: 3px solid var(--gold);
+  outline-offset: 3px;
+}
+
 @keyframes slot-pop {
   from {
     transform: scale(0.85);

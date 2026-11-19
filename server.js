@@ -968,6 +968,40 @@ io.on('connection', (socket) => {
     socket.emit('room-left', { roomId, position });
   });
 
+  // Changer de place dans la salle d'attente : vers n'importe quel siège libre.
+  // Interdit une fois la partie lancée (les mains sont attachées aux sièges).
+  on('change-seat', (data) => {
+    if (!currentRoom) return;
+    const game = games.get(currentRoom);
+    if (!game) return;
+
+    const from = game.getPlayerPosition(socket.id);
+    if (!from) return;
+
+    const to = sanitizePosition(data.position);
+    if (!to) {
+      socket.emit('error-msg', { message: 'Position invalide' });
+      return;
+    }
+    if (to === from) return;
+    if (game.state !== 'waiting') {
+      socket.emit('error-msg', { message: 'Impossible de changer de place une fois la partie lancée.' });
+      return;
+    }
+    if (game.players[to]) {
+      socket.emit('error-msg', { message: 'Cette place est déjà prise.' });
+      return;
+    }
+
+    game.players[to] = game.players[from];
+    delete game.players[from];
+
+    socket.emit('seat-changed', getRoomPayload(game, currentRoom, to));
+    broadcastMessage(currentRoom, `${getSafePlayerName(game, to)} se place en ${positionLabelFr(to)}.`);
+    broadcastGameState(currentRoom);
+    touchRoom(currentRoom);
+  });
+
   on('get-available-positions', (data) => {
     const roomId = sanitizeRoomCode(data.roomId);
     const game = games.get(roomId);
