@@ -12,7 +12,7 @@ const URL = `http://localhost:${PORT}`;
 const BAD_PAYLOADS = [undefined, null, 42, 'texte', [], [1, 2], true, { name: 123 }, { name: ['a'] }, { roomId: 7 }, { position: 'foo' }, { card: 'x' }, { card: { suit: 1 } }];
 const EVENTS = [
   'create-room', 'join-room', 'create-public-room', 'reconnect-room', 'add-bot', 'join-public-room',
-  'list-public-rooms', 'quick-play', 'bid', 'play-card', 'next-round', 'new-game', 'leave-room',
+  'list-public-rooms', 'quick-play', 'bid', 'play-card', 'next-round', 'new-game', 'leave-room', 'kick-player',
   'get-available-positions', 'chat-message', 'get-texture-packs'
 ];
 
@@ -147,6 +147,9 @@ async function main() {
     alice2.emit('add-bot', {});
     alice2.emit('add-bot', {});
     await started;
+    err = once(alice2, 'error-msg');
+    alice2.emit('kick-player', { position: 'sud' });
+    assert.match((await err).message, /après le démarrage/);
     bob.emit('leave-room');
     await wait(200);
     err = once(alice2, 'error-msg');
@@ -155,7 +158,29 @@ async function main() {
     console.log('  ok  - changement de place refusé une fois la partie lancée');
 
     for (const s of [alice2, bob]) s.close();
-    // 6) /debug rule dans le chat + ajout d'une IA "règles".
+
+    // 6) Le créateur peut expulser un joueur du lobby, mais pas un non-créateur.
+    const kicker = await connect();
+    const kickerRoom = once(kicker, 'room-created');
+    kicker.emit('create-room', { name: 'Créateur', position: 'sud' });
+    const { roomId: kickRoomId } = await kickerRoom;
+    const guest = await connect();
+    const guestJoined = once(guest, 'room-joined');
+    guest.emit('join-room', { name: 'Invité', roomId: kickRoomId, position: 'nord' });
+    await guestJoined;
+
+    const deniedKick = once(guest, 'error-msg');
+    guest.emit('kick-player', { position: 'sud' });
+    assert.match((await deniedKick).message, /propriétaire/);
+
+    const kicked = once(guest, 'kicked-from-room');
+    kicker.emit('kick-player', { position: 'nord' });
+    assert.strictEqual((await kicked).position, 'nord');
+    console.log('  ok  - kick du lobby réservé au créateur');
+
+    for (const s of [kicker, guest]) s.close();
+
+    // 7) /debug rule dans le chat + ajout d'une IA "règles".
     const host = await connect();
     const hostRoom = once(host, 'room-created');
     host.emit('create-room', { name: 'Hote' });

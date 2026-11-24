@@ -819,6 +819,18 @@ select option:disabled {
   font-weight: 700;
   font-size: 14px;
   overflow-wrap: anywhere;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+#waiting-room .player-kick-btn {
+  min-height: 32px;
+  padding: 4px 8px;
+  font-size: 12px;
+  line-height: 1.2;
 }
 
 .team-info {
@@ -2997,6 +3009,10 @@ body.is-dealing #bidding-panel {
   #lobby .btn,
   #waiting-room .btn {
     min-height: 46px;
+  }
+
+  #waiting-room .player-kick-btn {
+    min-height: 36px;
   }
 
   .lobby-form input,
