@@ -1,13 +1,22 @@
 {
   "name": "coinche",
-  "version": "1.0.0",
+  "version": "1.3.0",
   "description": "Jeu de Coinche multijoueur en ligne",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "test": "node test/run-tests.js && node test/server-robustness.js && node test/teams.test.js && node test/stats.test.js && node test/emotes.test.js && node test/stats-github.test.js",
+    "compare-ai": "node tools/compare-ai.js",
+    "check-emotes": "node tools/check-emotes.js"
   },
   "dependencies": {
     "express": "^4.18.2",
     "socket.io": "^4.7.2"
+  },
+  "devDependencies": {
+    "socket.io-client": "^4.8.1"
+  },
+  "engines": {
+    "node": ">=18"
   }
 }
