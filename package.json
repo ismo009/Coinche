@@ -5,8 +5,9 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "test": "node test/run-tests.js && node test/server-robustness.js",
-    "compare-ai": "node tools/compare-ai.js"
+    "test": "node test/run-tests.js && node test/server-robustness.js && node test/teams.test.js && node test/stats.test.js && node test/emotes.test.js",
+    "compare-ai": "node tools/compare-ai.js",
+    "check-emotes": "node tools/check-emotes.js"
   },
   "dependencies": {
     "express": "^4.18.2",

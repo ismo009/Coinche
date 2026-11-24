@@ -35,6 +35,31 @@ app.get('/lobby/:code', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
+// [feature:emotes] Emotes en image (public/emotes/*.png, validées par lib/emotes.js).
+const { createEmoteRegistry } = require('./lib/emotes');
+const emoteRegistry = createEmoteRegistry(path.join(__dirname, 'public', 'emotes'));
+const EMOTE_COOLDOWN_MS = 1500;
+emoteRegistry.list(); // premier scan au démarrage : avertit tout de suite des fichiers invalides
+app.get('/api/emotes', (req, res) => {
+  res.set('Cache-Control', 'no-cache');
+  res.json({ emotes: emoteRegistry.list() });
+});
+
+// [feature:stats] Statistiques des joueurs (fichier JSON, voir lib/stats-store.js)
+const { createStatsStore, recordRoundOutcome } = require('./lib/stats-store');
+const statsStore = createStatsStore().load();
+statsStore.installExitHandlers();
+const STATS_API_LIMIT = 500;
+
+app.get('/api/stats', (req, res) => {
+  const q = typeof req.query.q === 'string' ? req.query.q.slice(0, 40) : '';
+  res.set('Cache-Control', 'no-store');
+  res.json({
+    players: statsStore.list({ sort: 'wins', limit: STATS_API_LIMIT, q }),
+    updatedAt: statsStore.updatedAt
+  });
+});
+
 // Stockage des parties en cours
 const games = new Map();
 const PUBLIC_ROOM_PREFIX = 'PUB-';
@@ -373,6 +398,91 @@ function addBotAtPosition(roomId, game, position, botName = '', aiMode = 'legacy
   return { success: true };
 }
 
+// ============================================================
+// Noms d'équipe (point d'accroche unique pour tous les messages)
+// ============================================================
+const DEFAULT_TEAM_NAMES = { ns: 'Nord-Sud', eo: 'Est-Ouest' };
+
+function getTeamDisplayName(game, team) {
+  // [feature:teams] noms d'équipe personnalisés (défaut si aucun).
+  const custom = game?.teamNames?.[team];
+  return custom || DEFAULT_TEAM_NAMES[team] || team;
+}
+
+const TEAM_NAME_MAX_LENGTH = 24;
+const TEAM_NAME_COOLDOWN_MS = 2000;
+
+// Renomme l'équipe du joueur assis à `position`. Chaîne vide = nom par défaut.
+// `state.lastAt` porte l'anti-spam (un changement toutes les 2 s par socket).
+// Retourne { success, error?, name? }.
+function applyTeamRename(roomId, game, position, rawName, state) {
+  const player = game?.players?.[position];
+  if (!player || isBotPlayer(player)) {
+    return { success: false, error: 'Seul un joueur assis peut renommer son équipe.' };
+  }
+  const now = Date.now();
+  if (now - (state.lastAt || 0) < TEAM_NAME_COOLDOWN_MS) {
+    return { success: false, error: 'Doucement ! Attends un peu avant de renommer à nouveau ton équipe.' };
+  }
+
+  const team = getTeam(position);
+  const name = sanitizeText(rawName, TEAM_NAME_MAX_LENGTH);
+  const previous = game.teamNames?.[team] || null;
+  if ((name || null) === previous) {
+    return { success: true, name: getTeamDisplayName(game, team), unchanged: true };
+  }
+
+  const oldLabel = getTeamDisplayName(game, team);
+  game.setTeamName(team, name || null);
+  state.lastAt = now;
+  const newLabel = getTeamDisplayName(game, team);
+
+  if (name) {
+    broadcastMessage(roomId, `L'équipe ${oldLabel} s'appelle désormais « ${newLabel} »`, 'info');
+  } else {
+    broadcastMessage(roomId, `L'équipe « ${oldLabel} » reprend son nom par défaut : ${newLabel}`, 'info');
+  }
+  broadcastGameState(roomId);
+  touchRoom(roomId);
+  return { success: true, name: newLabel };
+}
+
+// ============================================================
+// Fin de manche / de partie : point d'accroche unique
+// (appelé que la dernière carte soit jouée par un humain ou une IA)
+// ============================================================
+function onRoundFinished(roomId, game, result) {
+  // result.action : 'round_end' | 'game_over' ; result.roundResult ; result.winner ('ns'|'eo') si game_over.
+  // [feature:stats] enregistrer ici les statistiques des joueurs.
+  recordRoundOutcome(statsStore, game, result);
+}
+
+// Messages consécutifs à une carte jouée (humain ou IA).
+function announcePlayResult(roomId, game, position, result) {
+  const actorName = getSafePlayerName(game, position);
+  if (result.beloteAnnounce) {
+    broadcastMessage(roomId, `${actorName}: ${result.beloteAnnounce} !`, 'success');
+  }
+  if (result.action === 'trick_complete') {
+    const winnerName = getSafePlayerName(game, result.winner);
+    broadcastMessage(roomId, `${winnerName} remporte le pli (+${result.points} pts)`);
+  }
+  if (result.action === 'round_end' || result.action === 'game_over') {
+    const rr = result.roundResult;
+    let msg = rr.contractMet ? '✓ Contrat réussi !' : '✗ Contrat chuté !';
+    msg += ` | ${getTeamDisplayName(game, 'ns')}: +${rr.scoreNS} | ${getTeamDisplayName(game, 'eo')}: +${rr.scoreEO}`;
+    broadcastMessage(roomId, msg, rr.contractMet ? 'success' : 'danger');
+    if (result.action === 'game_over') {
+      broadcastMessage(roomId, `🏆 ${getTeamDisplayName(game, result.winner)} remporte la partie !`, 'success');
+    }
+    try {
+      onRoundFinished(roomId, game, result);
+    } catch (err) {
+      console.error('[onRoundFinished] erreur :', err);
+    }
+  }
+}
+
 // Durées alignées sur les animations client (public/game-client.js).
 const BOT_TURN_DELAY_MS = 450;
 const BOT_AFTER_TRICK_DELAY_MS = 900;
@@ -471,26 +581,7 @@ function runBotTurn(roomId) {
 
     const botName = p.name || 'IA';
 
-    if (result.beloteAnnounce) {
-      broadcastMessage(roomId, `${botName}: ${result.beloteAnnounce} !`, 'success');
-    }
-
-      if (result.action === 'trick_complete') {
-        const winnerName = getSafePlayerName(latest, result.winner);
-        broadcastMessage(roomId, `${winnerName} remporte le pli (+${result.points} pts)`);
-      }
-      if (result.action === 'round_end' || result.action === 'game_over') {
-      const rr = result.roundResult;
-      let msg = rr.contractMet ? '✓ Contrat réussi !' : '✗ Contrat chuté !';
-      msg += ` | NS: +${rr.scoreNS} | EO: +${rr.scoreEO}`;
-      broadcastMessage(roomId, msg, rr.contractMet ? 'success' : 'danger');
-
-      if (result.action === 'game_over') {
-        const teamNames = { ns: 'Nord-Sud', eo: 'Est-Ouest' };
-        const winnerTeam = teamNames[result.winner];
-        broadcastMessage(roomId, `🏆 ${winnerTeam} remporte la partie !`, 'success');
-      }
-    }
+    announcePlayResult(roomId, latest, pos, result);
 
     broadcastGameState(roomId);
     touchRoom(roomId);
@@ -904,26 +995,7 @@ io.on('connection', (socket) => {
       return;
     }
 
-    if (result.beloteAnnounce) {
-      broadcastMessage(currentRoom, `${playerName}: ${result.beloteAnnounce} !`, 'success');
-    }
-
-    if (result.action === 'trick_complete') {
-      const winnerName = getSafePlayerName(game, result.winner);
-      broadcastMessage(currentRoom, `${winnerName} remporte le pli (+${result.points} pts)`);
-    }
-    if (result.action === 'round_end' || result.action === 'game_over') {
-      const rr = result.roundResult;
-      const teamNames = { ns: 'Nord-Sud', eo: 'Est-Ouest' };
-      let msg = rr.contractMet ? '✓ Contrat réussi !' : '✗ Contrat chuté !';
-      msg += ` | NS: +${rr.scoreNS} | EO: +${rr.scoreEO}`;
-      broadcastMessage(currentRoom, msg, rr.contractMet ? 'success' : 'danger');
-
-      if (result.action === 'game_over') {
-        const winnerTeam = teamNames[result.winner];
-        broadcastMessage(currentRoom, `🏆 ${winnerTeam} remporte la partie !`, 'success');
-      }
-    }
+    announcePlayResult(currentRoom, game, position, result);
 
     broadcastGameState(currentRoom);
     touchRoom(currentRoom);
@@ -1035,6 +1107,45 @@ io.on('connection', (socket) => {
     touchRoom(currentRoom);
   });
 
+  // [feature:teams] gestionnaires socket des noms d'équipe
+  const teamRenameState = { lastAt: 0 };
+  on('set-team-name', (data) => {
+    if (!currentRoom) return;
+    const game = games.get(currentRoom);
+    if (!game) return;
+    const position = game.getPlayerPosition(socket.id);
+    if (!position) return;
+
+    const result = applyTeamRename(currentRoom, game, position, data.name, teamRenameState);
+    if (!result.success) {
+      socket.emit('error-msg', { message: result.error });
+    }
+  });
+
+  // [feature:stats] gestionnaires socket des statistiques
+
+  // [feature:emotes] gestionnaires socket des emotes
+  // Une emote est diffusée à toute la salle avec la position de l'émetteur.
+  // Anti-spam : 1 emote / 1,5 s par socket, les envois en trop sont ignorés en silence.
+  let lastEmoteAt = 0;
+  on('emote', (data) => {
+    const game = currentRoom ? games.get(currentRoom) : null;
+    const position = game ? game.getPlayerPosition(socket.id) : null;
+    if (!position) {
+      socket.emit('error-msg', { message: 'Rejoins une table pour envoyer une emote.' });
+      return;
+    }
+    const id = typeof data.id === 'string' ? data.id : '';
+    if (!emoteRegistry.has(id)) {
+      socket.emit('error-msg', { message: 'Emote inconnue.' });
+      return;
+    }
+    const now = Date.now();
+    if (now - lastEmoteAt < EMOTE_COOLDOWN_MS) return;
+    lastEmoteAt = now;
+    io.to(currentRoom).emit('emote', { position, id });
+  });
+
   on('get-available-positions', (data) => {
     const roomId = sanitizeRoomCode(data.roomId);
     const game = games.get(roomId);
@@ -1076,6 +1187,7 @@ io.on('connection', (socket) => {
         emitSystemChatToSocket(socket.id, '/addia Nord|Sud|Est|Ouest [legacy|rule] - Ajoute une IA sur la position (créateur uniquement).');
         emitSystemChatToSocket(socket.id, '/debug rule - Vérifie les fichiers de règles de l\'IA (règles valides / invalides).');
         emitSystemChatToSocket(socket.id, '/texture [nomPack] - Change votre pack de textures cartes (ou affiche la liste).');
+        emitSystemChatToSocket(socket.id, '/team [nom] - Renomme votre équipe (sans nom : nom par défaut).');
       };
 
       if (!command) {
@@ -1222,6 +1334,19 @@ io.on('connection', (socket) => {
         emitTexturePackToSocket(socket.id, requester);
         emitSystemChatToSocket(socket.id, `Pack de textures actif : ${nextPack}`);
         touchRoom(currentRoom);
+        return;
+      }
+
+      if (command === 'team') {
+        // Le texte du chat est déjà tronqué à 180 caractères : on repart du texte brut
+        // pour que sanitizeText retire aussi les caractères de contrôle.
+        const rawArg = rawText.replace(/^\s*\/\S*\s?/, '');
+        const result = applyTeamRename(currentRoom, game, position, rawArg, teamRenameState);
+        if (!result.success) {
+          emitSystemChatToSocket(socket.id, result.error);
+        } else if (result.unchanged) {
+          emitSystemChatToSocket(socket.id, `Ton équipe s'appelle déjà « ${result.name} ».`);
+        }
         return;
       }
 
