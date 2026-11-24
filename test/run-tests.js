@@ -242,4 +242,104 @@ test('50 parties complètes entre IA sans coup illégal', () => {
   }
 });
 
+console.log('IA à règles');
+
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+const ruleEngine = require('../ai/rules/engine');
+const ruleBot = require('../ai/rule-bot');
+const X = require('../ai/rules/expression');
+
+test('expressions : évaluation (logique, ternaire, listes, lambdas, probabilités)', () => {
+  const ev = (src, values = {}) => X.evaluate(X.parse(src), { values, functions: {} });
+  assert.strictEqual(ev('1 + 2 * 3'), 7);
+  assert.strictEqual(ev("a == 'x' && b > 2 ? 10 : 0", { a: 'x', b: 3 }), 10);
+  assert.strictEqual(ev('count(l, c => c.v >= 2)', { l: [{ v: 1 }, { v: 2 }, { v: 3 }] }), 2);
+  assert.strictEqual(ev("'as' in ['10', 'as']"), true);
+  assert.strictEqual(ev('max(1, 5, 3) - min(4, 2)'), 3);
+  assert.ok(Math.abs(ev('pAtLeastOne(24, 2, 16)') - (1 - (8 * 7) / (24 * 23))) < 1e-9);
+  assert.strictEqual(ev('x.y.z', { x: null }), null); // lecture sûre de champs absents
+  assert.throws(() => X.parse('a +'), /inattendu/);
+});
+
+test('les fichiers de règles livrés sont tous valides', () => {
+  const report = ruleEngine.buildReport({ reload: true });
+  assert.strictEqual(report.fileErrors.length, 0, JSON.stringify(report.fileErrors));
+  assert.strictEqual(report.invalid.length, 0, JSON.stringify(report.invalid));
+  assert.ok(report.total >= 30);
+});
+
+test('/debug rule : règles invalides détectées et listées par id', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'coinche-rules-'));
+  const annonce = {
+    rules: [
+      { id: 1, when: 'canCoinche', action: { type: 'coinche' } },
+      { id: 2, when: "current.team == 'eux'", action: { type: 'pass' } },        // valeur d'énumération inconnue
+      { id: 3, action: { type: 'bid', points: 'best', suit: "'coeur'" } },        // variable inconnue
+      { id: 4, action: { type: 'pass' } }
+    ]
+  };
+  const jeux = {
+    rules: [
+      { id: 4, action: { type: 'score', value: 'card.points' } },                  // id en double
+      { id: 5, action: { type: 'play', cards: 'card.isTrump', pick: 'max' } },     // "by" manquant
+      { id: 6, when: 'trick.size ==', action: { type: 'exclude', cards: 'card.isTrump' } }, // syntaxe
+      { id: 7, action: { type: 'score', cards: 'card.pWin > 0.5', value: 'pGain(card, 21) * 10' } },
+      { id: 8, action: { type: 'jouer' } }                                         // action inconnue
+    ]
+  };
+  const fa = path.join(dir, 'a.json');
+  const fj = path.join(dir, 'j.json');
+  fs.writeFileSync(fa, JSON.stringify(annonce));
+  fs.writeFileSync(fj, JSON.stringify(jeux));
+  const report = ruleEngine.buildReport({ files: { annonce: fa, jeux: fj } });
+  const lines = ruleEngine.formatReportLines(report);
+  assert.strictEqual(lines[0], '9 rules - 3 valides - 6 invalides');
+  const ids = report.invalid.map(r => r.id).sort((a, b) => a - b);
+  assert.deepStrictEqual(ids, [2, 3, 4, 5, 6, 8]);
+  assert.ok(lines.some(l => l.startsWith('rule 2 invalide') && l.includes("'eux'")));
+  assert.ok(lines.some(l => l.startsWith('rule 4 invalide') && l.includes('déjà utilisé')));
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
+function playFullGame(botFor) {
+  const g = newGame();
+  g.startNewRound();
+  let guard = 0;
+  while (g.state !== 'finished' && guard++ < 20000) {
+    const pos = g.currentPlayer;
+    if (g.state === 'scoring') { g.startNewRound(); continue; }
+    if (g.state === 'bidding') {
+      const r = g.placeBid(pos, botFor(pos).chooseBid(g));
+      assert.ok(r.success, r.error);
+      if (r.action === 'redistribute') g.startNewRound();
+      continue;
+    }
+    const r = g.playCard(pos, botFor(pos).chooseCard(g, pos));
+    assert.ok(r.success, r.error);
+  }
+  assert.strictEqual(g.state, 'finished');
+  return g;
+}
+
+test('IA règles : 15 parties complètes sans coup illégal ni repli legacy', () => {
+  let fallbacks = 0;
+  for (let n = 0; n < 15; n++) {
+    playFullGame(() => ({
+      chooseBid: (g) => ruleBot.chooseBid(g),
+      chooseCard: (g, p) => {
+        const c = ruleBot.chooseCard(g, p);
+        if (ruleBot.lastDecision.jeux && ruleBot.lastDecision.jeux.ruleId === 'legacy') fallbacks++;
+        return c;
+      }
+    }));
+  }
+  assert.strictEqual(fallbacks, 0);
+});
+
+test('partie mixte : 2 IA legacy contre 2 IA règles', () => {
+  for (let n = 0; n < 10; n++) playFullGame(pos => (getTeam(pos) === 'ns' ? bot : ruleBot));
+});
+
 console.log(`\n${passed} test(s) réussi(s)`);

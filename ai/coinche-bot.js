@@ -1641,5 +1641,37 @@ function chooseCard(game, position) {
 module.exports = {
   chooseBid,
   chooseCard,
-  analyzeSignals
+  analyzeSignals,
+  // Fonctions internes exposées pour l'IA à règles (ai/rule-bot.js).
+  // Le comportement de l'IA legacy n'est pas modifié.
+  helpers: {
+    RANKS,
+    TRUMP_ORDER,
+    PLAIN_ORDER,
+    ALL_TRUMP_ORDER,
+    NO_TRUMP_ORDER,
+    buildDeck,
+    cardEquals,
+    removeCardsFromDeck,
+    getCardValueForContract,
+    determineCurrentWinnerEntry,
+    getPlayableCardsForSimulation,
+    drawRandomCards,
+    getDiscardRisk,
+    probabilityAtLeastOneSuccess,
+    clampToBidSteps,
+    hasBelote,
+    evaluateSuitBid,
+    evaluateAllTrumpBid,
+    evaluateNoTrumpBid,
+    estimateSpecialAnnouncementRiskPenalty,
+    estimateDefensePotentialPoints,
+    estimateOpponentBeloteRiskPenalty,
+    getHighestBidEntry,
+    shouldAllowPartnerRaise,
+    computePartnerRaiseIncrement,
+    findLatestPartnerSuitRelay,
+    computePartnerSuitReclaimBid,
+    isLowSignalCard
+  }
 };

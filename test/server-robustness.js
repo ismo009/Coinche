@@ -155,6 +155,28 @@ async function main() {
     console.log('  ok  - changement de place refusé une fois la partie lancée');
 
     for (const s of [alice2, bob]) s.close();
+    // 6) /debug rule dans le chat + ajout d'une IA "règles".
+    const host = await connect();
+    const hostRoom = once(host, 'room-created');
+    host.emit('create-room', { name: 'Hote' });
+    await hostRoom;
+    const chatLines = [];
+    host.on('chat-message', (m) => chatLines.push(m.text));
+    host.emit('chat-message', { text: '/debug rule' });
+    await wait(400);
+    assert.match(chatLines[0] || '', /^\d+ rules - \d+ valides - 0 invalides$/);
+    const botSeen = new Promise((resolve) => {
+      host.on('game-state', (st) => {
+        const bot = Object.values(st.players).find(p => p.ai === 'rule');
+        if (bot) resolve(bot);
+      });
+    });
+    host.emit('add-bot', { mode: 'rule' });
+    const ruleBotPlayer = await botSeen;
+    assert.strictEqual(ruleBotPlayer.name, 'IA Règles');
+    console.log(`  ok  - /debug rule : "${chatLines[0]}" ; IA "règles" ajoutée`);
+    host.close();
+
     for (const s of [attacker, player, other, third]) s.close();
     assert.strictEqual(exited, null, 'le serveur s\'est arrêté');
     console.log('\nRobustesse serveur : OK');

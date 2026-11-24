@@ -843,6 +843,33 @@ select option:disabled {
 
 .waiting-actions {
   margin-top: 16px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.bot-mode-label {
+  font-family: var(--font-pixel);
+  font-size: 18px;
+  color: var(--text-muted);
+}
+
+.bot-mode-select {
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  border: 2px solid var(--panel-edge);
+  background: var(--bg-0);
+  color: var(--text);
+  font-size: 15px;
+  font-weight: 600;
+  box-shadow: inset 0 3px 0 rgba(0, 0, 0, 0.3);
+}
+
+.bot-mode-select:focus {
+  outline: none;
+  border-color: var(--gold);
 }
 
 #btn-add-bot {

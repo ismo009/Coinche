@@ -879,7 +879,8 @@ class CoincheGame {
       if (this.players[pos]) {
         state.players[pos] = {
           name: this.players[pos].name,
-          connected: this.players[pos].connected !== false
+          connected: this.players[pos].connected !== false,
+          ai: this.players[pos].isBot ? (this.players[pos].aiMode || 'legacy') : null
         };
       }
     }

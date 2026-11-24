@@ -100,6 +100,16 @@ Serveur disponible sur `http://localhost:3000`.
 | 8 | 0 |
 | 7 | 0 |
 
+## IA : deux modes
+
+- **Legacy** (`ai/coinche-bot.js`) : l'IA historique.
+- **Regles** (`ai/rule-bot.js`) : pilotee par `ai/rules/rule_annonce.json` et `ai/rules/rule_jeux.json`,
+  modifiables par commit (relus automatiquement, sans redemarrage). Documentation complete : [RULE.md](RULE.md) ;
+  pour les agents IA : [RULE_AGENT.md](RULE_AGENT.md).
+- Choix du mode dans la salle d'attente (menu « Type d'IA ») ou `/addia Nord rule`.
+- `/debug rule` dans le chat : nombre de regles valides / invalides et detail des erreurs.
+- `npm run compare-ai` : compare les deux IA sur des donnes identiques.
+
 ## IA : logique des appels
 
 Convention utilisee par l'IA (et reconnue quand un humain la pratique) :
