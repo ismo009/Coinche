@@ -1972,9 +1972,33 @@ body.is-dealing .deal-deck {
 }
 
 .bid-bubble__logo {
-  width: 30px;
-  height: 30px;
+  width: 36px;
+  height: 36px;
   object-fit: contain;
+}
+
+/* Icône pixel-art d'une couleur d'annonce (public/logo/*.png, tools/generate-annonces.py) */
+.suit-icon {
+  display: inline-block;
+  width: 1.3em;
+  height: 1.3em;
+  margin: 0 0.1em;
+  vertical-align: -0.28em;
+  object-fit: contain;
+  pointer-events: none;
+  user-select: none;
+}
+
+.bid-entry .suit-icon {
+  width: 1.5em;
+  height: 1.5em;
+  vertical-align: -0.45em;
+}
+
+.center-banner .suit-icon {
+  width: 1.1em;
+  height: 1.1em;
+  vertical-align: -0.18em;
 }
 
 .bid-bubble__points {

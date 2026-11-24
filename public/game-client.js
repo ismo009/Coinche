@@ -1098,7 +1098,7 @@ function startDealAnimation(state) {
 }
 
 // ---- Pops au-dessus des sièges ----
-function showSeatPop(absPos, text, variant = 'bid', delayMs = 0) {
+function showSeatPop(absPos, text, variant = 'bid', delayMs = 0, suit = null) {
   const show = () => {
     const anchor = getSeatInfoElement(absPos);
     if (!anchor) return;
@@ -1107,7 +1107,8 @@ function showSeatPop(absPos, text, variant = 'bid', delayMs = 0) {
     const visualPos = getAbsToVisual()[absPos];
     const pop = document.createElement('div');
     pop.className = `seat-pop pop-${variant}`;
-    pop.textContent = text;
+    if (suit) appendAnnonce(pop, `${text} `, suit);
+    else pop.textContent = text;
     const x = Math.min(Math.max(rect.left + rect.width / 2, 70), window.innerWidth - 70);
     const y = visualPos === 'nord' ? rect.bottom + 22 : rect.top - 16;
     pop.style.left = `${Math.round(x)}px`;
@@ -1120,11 +1121,12 @@ function showSeatPop(absPos, text, variant = 'bid', delayMs = 0) {
   if (delayMs > 0) setTimeout(show, delayMs); else show();
 }
 
-function showCenterBanner(text, variant = 'contract', subtitle = '') {
+function showCenterBanner(text, variant = 'contract', subtitle = '', { suit = null, suffix = '' } = {}) {
   document.querySelectorAll('.center-banner').forEach(el => el.remove());
   const banner = document.createElement('div');
   banner.className = `center-banner banner-${variant}`;
-  banner.textContent = text;
+  if (suit) appendAnnonce(banner, `${text} `, suit, suffix);
+  else banner.textContent = text + suffix;
   if (subtitle) {
     const sub = document.createElement('small');
     sub.textContent = subtitle;
@@ -1189,7 +1191,7 @@ function playStateTransitionEffects(prev, next) {
         showCenterBanner('SURCOINCHE !', 'surcoinche', who);
         bigBannerShown = true;
       } else if (bid.type === 'bid') {
-        showSeatPop(bid.player, `${shortBidLabel(bid.points)} ${SUIT_SHORT[bid.suit] || ''}`.trim(), 'bid');
+        showSeatPop(bid.player, shortBidLabel(bid.points), 'bid', 0, bid.suit);
         // Annonces spéciales : capot, capot beloté, générale.
         const special = { 250: 'CAPOT !', 270: 'CAPOT BELOTÉ !', 500: 'GÉNÉRALE !' }[bid.points];
         if (special) {
@@ -1202,11 +1204,13 @@ function playStateTransitionEffects(prev, next) {
 
   // Fin des enchères -> bannière du contrat (après la bannière coinche/surcoinche le cas échéant).
   if (prev.state === 'bidding' && next.state === 'playing' && next.contract) {
-    let text = `${shortBidLabel(next.contract.points)} ${SUIT_SHORT[next.contract.suit] || ''}`.trim();
-    if (next.contract.surcoinched) text += ' ×3';
-    else if (next.contract.coinched) text += ' ×2';
-    if (bigBannerShown) setTimeout(() => showCenterBanner(text, 'contract'), 1300);
-    else showCenterBanner(text, 'contract');
+    const text = shortBidLabel(next.contract.points);
+    let suffix = '';
+    if (next.contract.surcoinched) suffix = ' ×3';
+    else if (next.contract.coinched) suffix = ' ×2';
+    const opts = { suit: next.contract.suit, suffix };
+    if (bigBannerShown) setTimeout(() => showCenterBanner(text, 'contract', '', opts), 1300);
+    else showCenterBanner(text, 'contract', '', opts);
   }
 
   // Belote / Rebelote.
@@ -2164,6 +2168,34 @@ function getBidLogoUrlForSuit(suit) {
   return `/logo/${file}`;
 }
 
+const SUIT_LABELS = {
+  coeur: 'Cœur', carreau: 'Carreau', trefle: 'Trèfle', pique: 'Pique',
+  'tout-atout': 'Tout atout', 'sans-atout': 'Sans atout'
+};
+
+// Icône pixel-art d'une couleur d'annonce (public/logo/*.png), ou null.
+function createSuitIcon(suit, className = 'suit-icon') {
+  const url = getBidLogoUrlForSuit(suit);
+  if (!url) return null;
+  const img = document.createElement('img');
+  img.className = className;
+  img.src = url;
+  img.alt = SUIT_LABELS[suit] || suit;
+  img.title = SUIT_LABELS[suit] || suit;
+  img.decoding = 'async';
+  img.draggable = false;
+  return img;
+}
+
+// Ajoute à `el` : texte, icône de la couleur, puis suffixe éventuel (ex. " ×2").
+function appendAnnonce(el, text, suit, suffix = '') {
+  if (text) el.append(text);
+  const icon = createSuitIcon(suit);
+  if (icon) el.append(icon);
+  else if (suit) el.append(` ${suit}`);
+  if (suffix) el.append(suffix);
+}
+
 function ensureBidBubbleEl(playerAreaEl) {
   if (!playerAreaEl) return null;
   let el = playerAreaEl.querySelector('.bid-bubble');
@@ -2327,7 +2359,7 @@ function updateRoundHistory() {
         <span class="history-entry-status ${statusClass}">${entry.contractMet ? 'réussi' : 'chuté'}</span>
       </div>
       <div class="history-entry-details">
-        Contrat: <strong>${formatBidPoints(entry.contract.points)} ${suitNames[entry.contract.suit] || entry.contract.suit}</strong><br>
+        Contrat: <strong>${formatBidPoints(entry.contract.points)} ${getBidLogoUrlForSuit(entry.contract.suit) ? `<img class="suit-icon" src="${getBidLogoUrlForSuit(entry.contract.suit)}" alt="${suitNames[entry.contract.suit] || ''}">` : (suitNames[entry.contract.suit] || '')}</strong><br>
         Manche: NS <strong>${entry.scoreNS}</strong> - EO <strong>${entry.scoreEO}</strong><br>
         Total: NS <strong>${entry.totalScores.ns}</strong> - EO <strong>${entry.totalScores.eo}</strong>
       </div>
@@ -2411,12 +2443,17 @@ function updateBidding() {
         label = 'SURCOINCHE !';
       } else if (bid.type === 'bid') {
         div.className = 'bid-entry is-bid';
-        label = `${formatBidPoints(bid.points)} ${suitNames[bid.suit] || bid.suit}`;
+        label = '';
       }
       // Le nom vient d'un autre joueur : toujours en texte, jamais en HTML.
       const strong = document.createElement('strong');
       strong.textContent = String(name ?? '');
-      div.append(strong, ` ${label}`);
+      if (bid.type === 'bid') {
+        div.append(strong);
+        appendAnnonce(div, ` ${formatBidPoints(bid.points)} `, bid.suit);
+      } else {
+        div.append(strong, ` ${label}`);
+      }
       history.appendChild(div);
     }
     history.scrollTop = history.scrollHeight;
@@ -2478,14 +2515,16 @@ function updateContract() {
   const el = document.getElementById('contract-info');
   if (gameState.state === 'playing' && gameState.contract) {
     el.classList.remove('hidden');
-    const suitNames = {
-      coeur: '♥ Coeur', carreau: '♦ Carreau', trefle: '♣ Trèfle',
-      pique: '♠ Pique', 'tout-atout': 'Tout Atout', 'sans-atout': 'Sans Atout'
-    };
-    let text = `Contrat: ${formatBidPoints(gameState.contract.points)} ${suitNames[gameState.contract.suit]}`;
-    if (gameState.contract.coinched) text += ' (COINCHÉ)';
-    if (gameState.contract.surcoinched) text += ' (SURCOINCÉ)';
-    el.querySelector('#contract-text').textContent = text;
+    const textEl = el.querySelector('#contract-text');
+    let suffix = '';
+    if (gameState.contract.surcoinched) suffix = ' (SURCOINCÉ)';
+    else if (gameState.contract.coinched) suffix = ' (COINCHÉ)';
+    const key = `${gameState.contract.points}|${gameState.contract.suit}|${suffix}`;
+    if (textEl.dataset.key !== key) {
+      textEl.dataset.key = key;
+      textEl.textContent = '';
+      appendAnnonce(textEl, `Contrat : ${formatBidPoints(gameState.contract.points)} `, gameState.contract.suit, suffix);
+    }
     el.classList.toggle('is-coinched', !!(gameState.contract.coinched || gameState.contract.surcoinched));
   } else {
     el.classList.add('hidden');

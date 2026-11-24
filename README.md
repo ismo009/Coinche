@@ -212,6 +212,8 @@ Convention utilisee par l'IA (et reconnue quand un humain la pratique) :
 ## Personnalisation rapide
 
 - Regles/scoring: `game.js`
+- Icones des annonces (coeur, carreau, trefle, pique, TA, SA) : `public/logo/*.png`, generees en pixel-art par
+  `python3 tools/generate-annonces.py` (Pillow) dans le style des emotes.
 - Interface/layout: `public/style.css` et `public/index.html`
 - Logique client temps reel: `public/game-client.js`
 
