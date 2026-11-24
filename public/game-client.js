@@ -1617,7 +1617,7 @@ document.getElementById('btn-create').addEventListener('click', () => {
 });
 
 // Type d'IA à ajouter (Legacy / Règles), mémorisé entre les parties.
-const BOT_MODE_STORAGE_KEY = 'coinche:bot-mode';
+const BOT_MODE_STORAGE_KEY = 'coinche:bot-mode:v2';
 (() => {
   const select = document.getElementById('bot-mode-select');
   if (!select) return;
