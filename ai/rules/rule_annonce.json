@@ -1,0 +1,122 @@
+{
+  "version": 1,
+  "description": "Règles d'annonce de l'IA 'règles'. Préremplies pour reproduire l'IA legacy (ai/coinche-bot.js). Documentation : RULE.md.",
+  "params": {
+    "openMin": 80,
+    "overcallStep": 10,
+    "overcallSafeLevel": 100,
+    "raiseCap": 20,
+    "coincheEnemyStrength": 0.32,
+    "coincheMarginUpTo90": 14,
+    "coincheMarginUpTo110": 11,
+    "coincheMarginUpTo130": 8,
+    "coincheMarginHigh": 6,
+    "coincheMaxContract": 250,
+    "surcoincheMargin": 40
+  },
+  "vars": [
+    { "name": "best", "expr": "bestValue()" },
+    { "name": "bestColor", "expr": "bestSuit()" },
+    { "name": "requiredDefense", "expr": "163 - current.points" },
+    {
+      "name": "defenseEffective",
+      "expr": "current.team == 'them' ? defensePotential(current.suit) - max(0, current.points - 80) * params.coincheEnemyStrength - opponentBeloteRisk(current.suit, current.points) : 0"
+    },
+    {
+      "name": "coincheMarginNeeded",
+      "expr": "current.points <= 90 ? params.coincheMarginUpTo90 : current.points <= 110 ? params.coincheMarginUpTo110 : current.points <= 130 ? params.coincheMarginUpTo130 : params.coincheMarginHigh"
+    },
+    { "name": "partnerIncrement", "expr": "current.by == 'partner' ? partnerRaise(current.suit, current.points) : 0" }
+  ],
+  "rules": [
+    {
+      "id": 1,
+      "name": "Coincher un contrat adverse trop ambitieux",
+      "description": "Comme l'IA legacy : on estime les points que la défense peut faire (potentiel de défense, moins un malus si l'enchère adverse est haute et un risque de belote adverse). On coinche si cette estimation dépasse ce qu'il faut pour faire chuter (163 - contrat) d'une marge qui dépend du niveau du contrat. Pas de coinche sur capot / générale.",
+      "source": "legacy",
+      "priority": 100,
+      "when": "canCoinche && current.points < params.coincheMaxContract && defenseEffective - requiredDefense >= coincheMarginNeeded",
+      "action": { "type": "coinche" }
+    },
+    {
+      "id": 2,
+      "name": "Surcoincher quand on est très au-dessus de son contrat",
+      "description": "Convention : on surcoinche si c'est notre propre contrat qui est coinché et que notre main vaut nettement plus que l'annonce. Absente de l'IA legacy (qui ne surcoinche jamais) : marge volontairement prudente.",
+      "source": "convention",
+      "priority": 95,
+      "when": "canSurcoinche && current.by == 'me' && estimate(current.suit) >= current.points + params.surcoincheMargin",
+      "action": { "type": "surcoinche" }
+    },
+    {
+      "id": 3,
+      "name": "Contrat coinché : on ne peut plus que passer",
+      "description": "Après une coinche, aucune nouvelle enchère n'est permise : on passe (sauf surcoinche, règle 2).",
+      "source": "regle",
+      "priority": 90,
+      "when": "coinched",
+      "action": { "type": "pass" }
+    },
+    {
+      "id": 4,
+      "name": "Soutenir (monter) l'annonce couleur du partenaire",
+      "description": "Comme l'IA legacy : si le partenaire a la meilleure enchère dans une couleur (pas TA/SA) et que le soutien est autorisé (pas de double soutien sans intervention adverse), on monte selon nos atouts (valet +20, 9 +10, as +10 au-delà de 100, belote +20), plafonné à +20.",
+      "source": "legacy",
+      "priority": 80,
+      "when": "partnerRaiseAllowed() && partnerIncrement > 0",
+      "action": { "type": "bid", "points": "min(current.points + partnerIncrement, current.points + params.raiseCap)", "suit": "current.suit" }
+    },
+    {
+      "id": 5,
+      "name": "Ouvrir les enchères avec la meilleure estimation",
+      "description": "Personne n'a encore annoncé : on annonce notre meilleure couleur (ou TA/SA) si l'estimation atteint le minimum d'ouverture.",
+      "source": "legacy",
+      "priority": 70,
+      "when": "current.points == 0 && best >= params.openMin",
+      "action": { "type": "bid", "points": "best", "suit": "bestColor" }
+    },
+    {
+      "id": 6,
+      "name": "Le contrat est à notre équipe : passer",
+      "description": "Si notre équipe a déjà la meilleure enchère et qu'aucun soutien n'a été déclenché, on passe.",
+      "source": "legacy",
+      "priority": 60,
+      "when": "current.team == 'us'",
+      "action": { "type": "pass" }
+    },
+    {
+      "id": 7,
+      "name": "Reprendre au minimum la couleur relayée par le partenaire",
+      "description": "Comme l'IA legacy : on avait annoncé une couleur, le partenaire l'a relayée, puis l'adversaire a surenchéri. On reprend au minimum (+10) si la confiance (relais du partenaire + nos cartes) est suffisante.",
+      "source": "legacy",
+      "priority": 55,
+      "when": "relayOvercalled() && reclaimBid() > 0",
+      "action": { "type": "bid", "points": "reclaimBid()", "suit": "reclaimSuit()" }
+    },
+    {
+      "id": 8,
+      "name": "Après un relais surenchéri sans reprise possible : passer",
+      "description": "Évite les sauts incontrôlés quand l'adversaire a surenchéri sur la couleur de notre équipe.",
+      "source": "legacy",
+      "priority": 54,
+      "when": "relayOvercalled()",
+      "action": { "type": "pass" }
+    },
+    {
+      "id": 9,
+      "name": "Surenchérir sur l'adversaire",
+      "description": "On surenchérit si notre estimation dépasse le contrat adverse d'au moins un palier, et soit l'estimation est solide (>= 100), soit le contrat adverse est bas (<= 100).",
+      "source": "legacy",
+      "priority": 50,
+      "when": "current.team == 'them' && best >= params.openMin && best >= current.points + params.overcallStep && (best >= params.overcallSafeLevel || current.points <= params.overcallSafeLevel)",
+      "action": { "type": "bid", "points": "best", "suit": "bestColor" }
+    },
+    {
+      "id": 10,
+      "name": "Sinon : passer",
+      "description": "Règle par défaut.",
+      "source": "legacy",
+      "priority": 0,
+      "action": { "type": "pass" }
+    }
+  ]
+}

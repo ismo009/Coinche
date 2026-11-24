@@ -358,6 +358,10 @@ function hasBeloteRebelote(hand, trumpSuit) {
   return (hasKing && hasQueen) ? [trumpSuit] : [];
 }
 
+// Noms d'équipe par défaut (remplaçables par les joueurs via setTeamName).
+const DEFAULT_TEAM_NAMES = { ns: 'Nord-Sud', eo: 'Est-Ouest' };
+const TEAM_NAME_MAX_LENGTH = 24;
+
 function roundScore(value) {
   return Math.round(value / 10) * 10;
 }
@@ -375,6 +379,10 @@ class CoincheGame {
     // Score global (parties)
     this.scores = { ns: 0, eo: 0 };
     this.targetScore = 2000;
+
+    // Noms d'équipe personnalisés (null = nom par défaut). Conservés pendant toute
+    // la vie de la salle, y compris lors d'une « Nouvelle partie ».
+    this.teamNames = { ns: null, eo: null };
 
     // Manche en cours
     this.dealer = 'sud';
@@ -405,9 +413,28 @@ class CoincheGame {
     this.roundHistory = [];
     this.roundNumber = 0;
 
+    // Identifiant de donne (incrémenté à chaque distribution) : permet au client
+    // de déclencher l'animation de distribution une seule fois par donne.
+    this.dealId = 0;
+    this.dealStartedAt = 0;
+
     // Historique détaillé des cartes jouées (utile pour IA serveur)
     // Chaque entrée: { roundNumber, trickNumber, indexInTrick, player, card, contractSuit }
     this.playHistory = [];
+  }
+
+  // Renomme une équipe ('ns' | 'eo'). null / chaîne vide = retour au nom par défaut.
+  // Le nom doit déjà être assaini par l'appelant ; on borne quand même la longueur.
+  setTeamName(team, name) {
+    if (team !== 'ns' && team !== 'eo') return false;
+    const value = typeof name === 'string' ? name.trim().slice(0, TEAM_NAME_MAX_LENGTH) : '';
+    this.teamNames[team] = value || null;
+    return true;
+  }
+
+  // Nom effectif d'une équipe (personnalisé ou défaut).
+  getTeamName(team) {
+    return this.teamNames[team] || DEFAULT_TEAM_NAMES[team] || team;
   }
 
   addPlayer(playerId, playerName, position) {
@@ -460,21 +487,29 @@ class CoincheGame {
     // On démarre un nouvel historique de manche
     this.playHistory = [];
 
+    this.dealId++;
+    this.dealStartedAt = Date.now();
+
     // Le joueur après le donneur commence les enchères
     this.currentPlayer = getNextPlayer(this.dealer);
     this.state = 'bidding';
 
-    // Vérifier la belote pour chaque joueur (sera annoncée plus tard)
-    for (const pos of POSITIONS) {
-      // On ne peut pas checker la belote pendant les enchères car on ne connaît pas l'atout
-    }
+    // Note: la belote est détectée au début du jeu (startPlaying), une fois l'atout connu.
 
     return true;
   }
 
   placeBid(playerPosition, bid) {
     if (this.state !== 'bidding') return { success: false, error: 'Pas en phase d\'enchères' };
-    if (playerPosition !== this.currentPlayer) return { success: false, error: 'Ce n\'est pas votre tour' };
+    if (!bid || typeof bid !== 'object') return { success: false, error: 'Action invalide' };
+
+    // La coinche (et la surcoinche en réponse) peut s'annoncer à tout moment des enchères,
+    // sans attendre son tour : dès qu'on estime que l'adversaire ne fera pas son contrat.
+    // Les enchères et les "passe" restent soumis au tour de parole.
+    const outOfTurnAllowed = bid.type === 'coinche' || bid.type === 'surcoinche';
+    if (!outOfTurnAllowed && playerPosition !== this.currentPlayer) {
+      return { success: false, error: 'Ce n\'est pas votre tour' };
+    }
 
     if (bid.type === 'pass') {
       this.passCount++;
@@ -574,7 +609,11 @@ class CoincheGame {
     if (this.surcoincheBy) this.contract.surcoinched = true;
 
     this.state = 'playing';
-    this.currentPlayer = getNextPlayer(this.dealer);
+    // Règle de la générale : le joueur qui l'a annoncée entame obligatoirement le
+    // premier pli, même si ce n'est pas son tour. Sinon, le joueur après le donneur entame.
+    this.currentPlayer = this.contract.points === 500
+      ? this.contract.player
+      : getNextPlayer(this.dealer);
     this.trickNumber = 1;
 
     // Vérifier belote (peut être multiple en tout-atout)
@@ -592,9 +631,15 @@ class CoincheGame {
     if (this.state !== 'playing') return { success: false, error: 'Pas en phase de jeu' };
     if (playerPosition !== this.currentPlayer) return { success: false, error: 'Ce n\'est pas votre tour' };
 
+    if (!card || typeof card.suit !== 'string' || typeof card.rank !== 'string') {
+      return { success: false, error: 'Carte invalide' };
+    }
+
     const hand = this.hands[playerPosition];
     const cardIndex = hand.findIndex(c => cardEquals(c, card));
     if (cardIndex === -1) return { success: false, error: 'Vous n\'avez pas cette carte' };
+    // On utilise la carte du serveur (jamais l'objet envoyé par le client).
+    card = { suit: hand[cardIndex].suit, rank: hand[cardIndex].rank };
 
     // Vérifier que la carte est jouable
     const playable = getPlayableCardsWithPlayer(hand, this.currentTrick, this.contract.suit, playerPosition);
@@ -828,9 +873,11 @@ class CoincheGame {
       roomId: this.roomId,
       state: this.state,
       targetScore: this.targetScore,
+      teamNames: { ns: this.getTeamName('ns'), eo: this.getTeamName('eo') },
       players: {},
       scores: this.scores,
       dealer: this.dealer,
+      dealId: this.dealId,
       currentPlayer: this.currentPlayer,
       contract: this.contract,
       trickNumber: this.trickNumber,
@@ -855,7 +902,8 @@ class CoincheGame {
       if (this.players[pos]) {
         state.players[pos] = {
           name: this.players[pos].name,
-          connected: this.players[pos].connected !== false
+          connected: this.players[pos].connected !== false,
+          ai: this.players[pos].isBot ? (this.players[pos].aiMode || 'legacy') : null
         };
       }
     }
@@ -888,5 +936,7 @@ module.exports = {
   RANKS,
   getTeam,
   getPartner,
-  getNextPlayer
+  getNextPlayer,
+  DEFAULT_TEAM_NAMES,
+  TEAM_NAME_MAX_LENGTH
 };

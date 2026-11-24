@@ -1,0 +1,4 @@
+# Données d'exécution (statistiques des joueurs, etc.)
+data/
+# Copies de travail temporaires des agents Claude Code
+.claude/worktrees/

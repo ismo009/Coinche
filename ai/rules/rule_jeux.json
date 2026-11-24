@@ -1,0 +1,360 @@
+{
+  "version": 1,
+  "description": "Règles de jeu de la carte de l'IA 'règles'. Préremplies pour reproduire l'IA legacy (ai/coinche-bot.js). Documentation : RULE.md.",
+  "simulation": { "samples": 48 },
+  "final": { "tieBreak": "lowest" },
+  "params": {
+    "winBonusMe": 4,
+    "winBonusPartner": 2,
+    "losePenalty": 2,
+    "riskWeightWin": 0.05,
+    "riskWeightLose": 0.45,
+    "appelResponseBonus": 14,
+    "opponentAppelPenalty": 9,
+    "keepAppelSuitPenalty": 10,
+    "falseAppelPenalty": 7,
+    "masterAceDiscardPenalty": 18,
+    "partnerMasterTrumpWaste": 36,
+    "partnerMasterByCutTrumpWaste": 52,
+    "firstTrickTrumpBonus": 20,
+    "firstTrickOffTrumpPenalty": 14,
+    "defenseTrumpLeadPenalty": 15,
+    "defenseJackLeadPenalty": 24,
+    "defenseTrumpOnPartnerPenalty": 8,
+    "overtrumpLowRisk": 0.28,
+    "overtrumpHighRisk": 0.58
+  },
+  "vars": [
+    { "name": "couleur", "expr": "contract.type == 'couleur'" },
+    { "name": "attack", "expr": "role == 'attack'" },
+    { "name": "hasNonTrumpAlt", "expr": "couleur && any(playable, c => !c.isTrump)" },
+    { "name": "trumpReserve", "expr": "trick.number <= 5 ? 2 : trick.number <= 7 ? 1 : 0" },
+    { "name": "noEnemyTrumpLeft", "expr": "couleur && (trumps.unseen == 0 || trumps.opponentsOut || trumps.enemyEstimate <= 1)" },
+    { "name": "preserveTrumps", "expr": "couleur && attack && trick.leading && trick.number < 8 && trumps.mine > 0 && noEnemyTrumpLeft" },
+    {
+      "name": "forceFirstTrumpLead",
+      "expr": "couleur && attack && trick.leading && trick.number == 1 && trumps.mine > 0 && trumps.unseen > 0 && !trumps.opponentsOut && !preserveTrumps"
+    },
+    {
+      "name": "pullTrumps",
+      "expr": "couleur && attack && trick.leading && trick.lastWinner == 'us' && trumps.mine > 0 && trumps.unseen > 0 && !trumps.opponentsOut && trumps.enemyEstimate > 0 && !preserveTrumps"
+    },
+    {
+      "name": "appelSuit",
+      "expr": "trick.leading && signals.partnerSuit != null && any(playable, c => c.suit == signals.partnerSuit) && !opponentMayCut(signals.partnerSuit) ? signals.partnerSuit : null"
+    },
+    { "name": "followAppel", "expr": "appelSuit != null && !(attack && (forceFirstTrumpLead || pullTrumps))" },
+    { "name": "discardWhenPartnerMaster", "expr": "couleur && !trick.leading && trick.partnerMaster && hasNonTrumpAlt" },
+    { "name": "masterAppelAvailable", "expr": "signals.myFirstDiscard && any(playable, c => c.isDiscard && c.isLowSignal && c.isLowestInSuit && c.suitCount >= 2 && masterInHand(c.suit))" }
+  ],
+  "rules": [
+    {
+      "id": 101,
+      "name": "Faire un appel à la première défausse",
+      "description": "Première défausse de la manche : jeter la plus petite carte (valeur 0) d'une couleur dont on détient la carte maîtresse, pour indiquer au partenaire qu'on y est maître. On choisit la couleur la plus riche (points de la maîtresse, secondes maîtresses, longueur).",
+      "source": "legacy",
+      "priority": 1000,
+      "when": "masterAppelAvailable",
+      "action": {
+        "type": "play",
+        "cards": "card.isDiscard && card.isLowSignal && card.isLowestInSuit && card.suitCount >= 2 && masterInHand(card.suit)",
+        "pick": "max",
+        "by": "highestInHand(card.suit).points + count(hand, c => c.suit == card.suit && !c.isHighestInSuit && c.unseenStronger <= 1) * 6 + card.suitCount * 2"
+      }
+    },
+    {
+      "id": 102,
+      "name": "Répondre à l'appel du partenaire",
+      "description": "Quand on a la main et que le partenaire a fait un appel, on rejoue sa couleur (sauf si un adversaire chicane peut couper, ou si l'attaque fait encore tomber les atouts).",
+      "source": "legacy",
+      "priority": 900,
+      "when": "followAppel",
+      "action": { "type": "restrict", "cards": "card.suit == appelSuit" }
+    },
+    {
+      "id": 103,
+      "name": "Partenaire maître : ne pas couper, défausser",
+      "description": "Si le partenaire est maître du pli et qu'on peut défausser, on ne gaspille pas d'atout.",
+      "source": "legacy",
+      "priority": 890,
+      "when": "discardWhenPartnerMaster",
+      "action": { "type": "exclude", "cards": "card.isTrump" }
+    },
+    {
+      "id": 104,
+      "name": "Preneur : entamer atout au premier pli",
+      "description": "Convention : le preneur (ou son partenaire) fait tomber les atouts adverses dès le premier pli.",
+      "source": "legacy",
+      "priority": 880,
+      "when": "forceFirstTrumpLead",
+      "action": { "type": "restrict", "cards": "card.isTrump" }
+    },
+    {
+      "id": 105,
+      "name": "Attaque : continuer à faire tomber les atouts",
+      "description": "L'attaque qui vient de remporter le pli rejoue atout tant que l'adversaire semble en avoir.",
+      "source": "legacy",
+      "priority": 870,
+      "when": "pullTrumps",
+      "action": { "type": "restrict", "cards": "card.isTrump" }
+    },
+    {
+      "id": 106,
+      "name": "Attaque : garder ses atouts quand l'adversaire n'en a plus",
+      "description": "Inutile d'entamer atout dans le vide : on garde ses atouts pour couper et pour le dernier pli (10 de der).",
+      "source": "legacy",
+      "priority": 860,
+      "when": "preserveTrumps",
+      "action": { "type": "exclude", "cards": "card.isTrump" }
+    },
+    {
+      "id": 107,
+      "name": "Défense : ne pas entamer atout",
+      "description": "En défense, on évite d'ouvrir à l'atout (ça aide l'attaque à purger les atouts).",
+      "source": "legacy",
+      "priority": 850,
+      "when": "couleur && !attack && trick.leading",
+      "action": { "type": "exclude", "cards": "card.isTrump" }
+    },
+    {
+      "id": 110,
+      "name": "Score de base : espérance du pli (simulation)",
+      "description": "Espérance nette des points du pli (gagnés - perdus) d'après la simulation Monte-Carlo, + petit bonus si on gagne le pli (davantage si c'est nous), - malus si on le perd, - coût de la carte sacrifiée (risk), plus lourd si le pli est perdu.",
+      "source": "legacy",
+      "priority": 500,
+      "action": {
+        "type": "score",
+        "value": "card.evNet + params.winBonusMe * card.pWinMe + params.winBonusPartner * (card.pWin - card.pWinMe) - params.losePenalty * card.pLose - card.risk * (params.riskWeightWin * card.pWin + params.riskWeightLose * card.pLose)"
+      }
+    },
+    {
+      "id": 111,
+      "name": "Partenaire maître : ne pas défausser un as hors atout",
+      "description": "Un as hors atout est (presque toujours) maître : on le garde pour faire un pli plus tard.",
+      "source": "legacy",
+      "priority": 400,
+      "when": "couleur && trick.partnerMaster",
+      "action": { "type": "score", "cards": "card.rank == 'as' && !card.isTrump && !card.isLed", "value": "-params.masterAceDiscardPenalty" }
+    },
+    {
+      "id": 112,
+      "name": "Partenaire maître : garder un 10 second (as déjà tombé)",
+      "description": "Si l'as de la couleur est tombé, notre 10 devient maître : malus pour le défausser, d'autant plus fort que l'adversaire a peu d'atouts (le 10 a plus de chances de passer).",
+      "source": "legacy",
+      "priority": 399,
+      "when": "couleur && trick.partnerMaster",
+      "action": {
+        "type": "score",
+        "cards": "card.rank == '10' && !card.isTrump && !card.isLed && isPlayed('as', card.suit)",
+        "value": "-(trumps.enemyEstimate <= 1 ? 14 : trumps.enemyEstimate <= 3 ? 11 : trumps.enemyEstimate <= 5 ? 8 : 5)"
+      }
+    },
+    {
+      "id": 113,
+      "name": "Tout atout : partenaire maître, garder ses maîtresses",
+      "description": "En tout atout, si le partenaire gagne déjà le pli et qu'on a une carte plus basse dans la couleur, on ne brûle pas une maîtresse (-18) ni une seconde maîtresse (-16).",
+      "source": "legacy",
+      "priority": 398,
+      "when": "contract.type == 'tout-atout' && trick.partnerMaster",
+      "action": {
+        "type": "score",
+        "cards": "card.unseenStronger <= 1 && any(playable, c => c.suit == card.suit && c.order < card.order)",
+        "value": "card.unseenStronger == 0 ? -18 : -16"
+      }
+    },
+    {
+      "id": 114,
+      "name": "Sans atout : partenaire maître, garder ses maîtresses",
+      "description": "Même principe en sans atout (-17 pour une maîtresse, -14 pour une seconde maîtresse).",
+      "source": "legacy",
+      "priority": 397,
+      "when": "contract.type == 'sans-atout' && trick.partnerMaster",
+      "action": {
+        "type": "score",
+        "cards": "card.unseenStronger <= 1 && any(playable, c => c.suit == card.suit && c.order < card.order)",
+        "value": "card.unseenStronger == 0 ? -17 : -14"
+      }
+    },
+    {
+      "id": 115,
+      "name": "Garder les atouts forts quand un plus fort est dehors",
+      "description": "Ex. avec 8 et 9 d'atout alors que le valet n'est pas tombé : jouer le 8 et garder le 9. Malus plus fort si le partenaire est maître, si on entame, et si l'adversaire a encore beaucoup d'atouts.",
+      "source": "legacy",
+      "priority": 396,
+      "when": "couleur",
+      "action": {
+        "type": "score",
+        "cards": "card.isTrump && !card.isMaster && any(playable, c => c.isTrump && c.order < card.order)",
+        "value": "-((trick.partnerMaster ? 14 : trick.leading ? 10 : 6) + (trumps.enemyEstimate >= 3 ? 2 : 0))"
+      }
+    },
+    {
+      "id": 116,
+      "name": "Défense : économiser ses atouts",
+      "description": "En défense, entamer atout coûte cher (-24 pour le valet, -15 sinon) et jouer atout sur le pli du partenaire maître aussi (-8).",
+      "source": "legacy",
+      "priority": 395,
+      "when": "couleur && !attack",
+      "action": {
+        "type": "score",
+        "cards": "card.isTrump",
+        "value": "-((trick.leading ? (card.rank == 'valet' ? params.defenseJackLeadPenalty : params.defenseTrumpLeadPenalty) : 0) + (trick.partnerMaster ? params.defenseTrumpOnPartnerPenalty : 0))"
+      }
+    },
+    {
+      "id": 117,
+      "name": "Partenaire maître : ne pas gaspiller d'atout",
+      "description": "Si une défausse est possible, jouer atout sur le pli du partenaire est très pénalisé (encore plus s'il est maître par une coupe).",
+      "source": "legacy",
+      "priority": 394,
+      "when": "couleur && trick.partnerMaster && hasNonTrumpAlt",
+      "action": {
+        "type": "score",
+        "cards": "card.isTrump",
+        "value": "-(trick.cut ? params.partnerMasterByCutTrumpWaste : params.partnerMasterTrumpWaste)"
+      }
+    },
+    {
+      "id": 118,
+      "name": "Partenaire maître : se créer une coupe",
+      "description": "On préfère défausser dans une couleur courte (bientôt chicane = future coupe), sans jeter trop de points (as -10, 10 -6).",
+      "source": "legacy",
+      "priority": 393,
+      "when": "couleur && trick.partnerMaster && hasNonTrumpAlt",
+      "action": {
+        "type": "score",
+        "cards": "!card.isTrump",
+        "value": "(card.suitCount == 1 ? 16 : card.suitCount == 2 ? 9 : card.suitCount == 3 ? 4 : 0) + (trick.cut ? 6 : 0) - (card.rank == 'as' ? 10 : card.rank == '10' ? 6 : 0)"
+      }
+    },
+    {
+      "id": 119,
+      "name": "Attaque : pression atout au premier pli",
+      "description": "Au premier pli, le preneur préfère entamer atout (bonus, un peu moindre pour les gros atouts) plutôt qu'encaisser ses as/10 de côté.",
+      "source": "legacy",
+      "priority": 392,
+      "when": "couleur && attack && trick.leading && trick.number == 1",
+      "action": {
+        "type": "score",
+        "value": "card.isTrump ? params.firstTrickTrumpBonus - card.risk * 0.15 : -params.firstTrickOffTrumpPenalty"
+      }
+    },
+    {
+      "id": 120,
+      "name": "Attaque : pas d'atout dans le vide quand on en a peu",
+      "description": "Si l'adversaire n'a (presque) plus d'atout, entamer atout est pénalisé : -24 si notre stock est juste au-dessus de la réserve de fin de partie, -12 sinon.",
+      "source": "legacy",
+      "priority": 391,
+      "when": "preserveTrumps",
+      "action": { "type": "score", "cards": "card.isTrump", "value": "-(trumps.mine <= trumpReserve + 1 ? 24 : 12)" }
+    },
+    {
+      "id": 121,
+      "name": "Coupe : espérance selon le risque de surcoupe",
+      "description": "Quand on coupe, bonus = (1 - p) * 9 - p * 9, où p est la probabilité d'être surcoupé (simulation).",
+      "source": "legacy",
+      "priority": 390,
+      "when": "couleur && !trick.leading && trick.ledSuit != trump",
+      "action": { "type": "score", "cards": "card.isTrump", "value": "(1 - card.pOvertrumped) * 9 - card.pOvertrumped * 9" }
+    },
+    {
+      "id": 122,
+      "name": "Coupe à faible risque : couper petit, garder les gros atouts",
+      "description": "Si le risque de surcoupe est faible, on coupe économique : malus pour valet (-18, ou -10 sans alternative), 9 (-12 / -7), as (-6), 10 (-5), bonus +4 pour les petits atouts, +6 de plus si on garde le valet pour tirer ensuite.",
+      "source": "legacy",
+      "priority": 389,
+      "when": "couleur && !trick.leading && trick.ledSuit != trump",
+      "action": {
+        "type": "score",
+        "cards": "card.isTrump && card.pOvertrumped <= params.overtrumpLowRisk",
+        "value": "card.rank == 'valet' ? (any(playable, c => c.isTrump && c.order < card.order) ? -18 : -10) : card.rank == '9' ? (any(playable, c => c.isTrump && c.order < card.order) ? -12 : -7) : card.rank == 'as' ? -6 : card.rank == '10' ? -5 : 4 + (card.rank in ['7', '8', 'dame'] && hasCard('valet', trump) && any(playable, c => c.isTrump && c.order < card.order) ? 6 : 0)"
+      }
+    },
+    {
+      "id": 123,
+      "name": "Coupe à fort risque : couper gros",
+      "description": "Si l'adversaire a de fortes chances de surcouper, les petites coupes sont pénalisées (7/8 -14, dame/roi -8) et les grosses favorisées (10/as +2, 9/valet +5).",
+      "source": "legacy",
+      "priority": 388,
+      "when": "couleur && !trick.leading && trick.ledSuit != trump",
+      "action": {
+        "type": "score",
+        "cards": "card.isTrump && card.pOvertrumped >= params.overtrumpHighRisk",
+        "value": "card.rank in ['7', '8'] ? -14 : card.rank in ['dame', 'roi'] ? -8 : card.rank in ['10', 'as'] ? 2 : 5"
+      }
+    },
+    {
+      "id": 124,
+      "name": "Coupe à risque moyen : atout moyen",
+      "description": "Risque intermédiaire : léger malus pour le valet (-6 / -2) et les tout petits atouts (-3).",
+      "source": "legacy",
+      "priority": 387,
+      "when": "couleur && !trick.leading && trick.ledSuit != trump",
+      "action": {
+        "type": "score",
+        "cards": "card.isTrump && card.pOvertrumped > params.overtrumpLowRisk && card.pOvertrumped < params.overtrumpHighRisk",
+        "value": "card.rank == 'valet' ? (any(playable, c => c.isTrump && c.order < card.order) ? -6 : -2) : card.rank in ['7', '8'] ? -3 : 0"
+      }
+    },
+    {
+      "id": 130,
+      "name": "Appel du partenaire : rejouer sa plus petite carte",
+      "description": "Dans la couleur appelée, on rejoue la plus petite carte pour laisser le partenaire prendre avec sa maîtresse.",
+      "source": "legacy",
+      "priority": 300,
+      "when": "followAppel",
+      "action": { "type": "score", "cards": "card.suit == appelSuit && card.isLowestInSuit", "value": "params.appelResponseBonus" }
+    },
+    {
+      "id": 131,
+      "name": "Ne pas entamer une couleur appelée par l'adversaire",
+      "description": "Un adversaire qui a fait un appel est maître dans la couleur : on évite de l'entamer (sauf avec une maîtresse).",
+      "source": "legacy",
+      "priority": 299,
+      "when": "trick.leading && len(signals.opponentSuits) > 0",
+      "action": { "type": "score", "cards": "card.suit in signals.opponentSuits && !card.isMaster", "value": "-params.opponentAppelPenalty" }
+    },
+    {
+      "id": 132,
+      "name": "Garder une carte dans la couleur appelée par le partenaire",
+      "description": "Défausser sa dernière carte de la couleur appelée empêcherait de la rejouer plus tard.",
+      "source": "legacy",
+      "priority": 298,
+      "when": "signals.partnerSuit != null",
+      "action": { "type": "score", "cards": "card.isDiscard && card.suit == signals.partnerSuit && card.suitCount == 1", "value": "-params.keepAppelSuitPenalty" }
+    },
+    {
+      "id": 133,
+      "name": "Éviter un faux appel",
+      "description": "Première défausse sans couleur maîtresse, partenaire maître : on préfère jeter une petite figure non maîtresse plutôt qu'une petite carte qui serait lue comme un appel.",
+      "source": "legacy",
+      "priority": 297,
+      "when": "signals.myFirstDiscard && !masterAppelAvailable && trick.partnerMaster && any(playable, c => c.isDiscard && !c.isLowSignal && c.points <= 4 && !c.isMaster)",
+      "action": { "type": "score", "cards": "card.isDiscard && card.isLowSignal", "value": "-params.falseAppelPenalty" }
+    },
+    {
+      "id": 140,
+      "name": "Exemple : défense, encaisser un as quand il rapporte au moins 21 points",
+      "description": "Exemple d'utilisation des probabilités (désactivé) : en défense, entamer un as hors atout si la simulation donne plus de 55 % de chances de faire au moins 21 points (as + 10), et moins de 25 % de se faire couper.",
+      "source": "exemple",
+      "enabled": false,
+      "priority": 950,
+      "when": "!attack && trick.leading && couleur",
+      "action": {
+        "type": "play",
+        "cards": "card.rank == 'as' && !card.isTrump && pGain(card, 21) > 0.55 && card.pCut < 0.25",
+        "pick": "max",
+        "by": "card.ev"
+      }
+    },
+    {
+      "id": 141,
+      "name": "Exemple : bonus d'espérance pour les cartes qui font au moins 11 points",
+      "description": "Exemple (désactivé) : bonus proportionnel à la probabilité que la carte rapporte au moins 11 points à l'équipe, malus proportionnel à la probabilité de perdre au moins 20 points.",
+      "source": "exemple",
+      "enabled": false,
+      "priority": 200,
+      "action": { "type": "score", "value": "pGain(card, 11) * 5 - pLoss(card, 20) * 5" }
+    }
+  ]
+}

@@ -14,8 +14,8 @@ let pendingRoomLeave = false;
 let currentTexturePack = 'Classic';
 let availableTexturePacks = ['Classic','Balatro'];
 
-// Trick collect animation (UX): wait 0.2s then slide cards to trick winner.
-const TRICK_COLLECT_DELAY_MS = 300;
+// Trick collect animation (UX): highlight the winning card, then slide cards to the winner.
+const TRICK_COLLECT_DELAY_MS = 420;
 const TRICK_COLLECT_ANIM_MS = 500;
 
 // Card play animation (hand -> center)
@@ -100,8 +100,10 @@ function isMobilePortraitGameplay() {
   return window.matchMedia && window.matchMedia('(max-width: 600px) and (orientation: portrait)').matches;
 }
 
+const PHONE_UI_QUERY = '(max-width: 600px), (max-height: 500px) and (orientation: landscape)';
+
 function isPhoneUi() {
-  return window.matchMedia && window.matchMedia('(max-width: 600px)').matches;
+  return window.matchMedia && window.matchMedia(PHONE_UI_QUERY).matches;
 }
 
 function resetPanelsForPhoneUi() {
@@ -135,7 +137,14 @@ function initMobileChatToggle() {
     document.body.classList.remove('chat-open');
   };
 
-  chatUi.openBtn.addEventListener('click', openChat);
+  chatUi.openBtn.addEventListener('click', () => {
+    if (isPhoneUi() && document.body.classList.contains('chat-open')) {
+      closeChat();
+      return;
+    }
+    closeMobilePopovers();
+    openChat();
+  });
   chatUi.closeBtn.addEventListener('click', closeChat);
 
   // Prevent the close button from acting as a drag handle on desktop.
@@ -203,61 +212,55 @@ initDesktopChatCollapse();
 
 initMobileChatToggle();
 
-function initMobileHistoryToggle() {
-  const title = document.querySelector('#round-history-panel .round-history-title');
-  if (!title) return;
+// ---- Phone HUD popovers (dernier pli / historique) ----
+const MOBILE_POPOVERS = {
+  lasttrick: { bodyClass: 'mobile-lasttrick-open', button: 'btn-hud-lasttrick', title: '#last-trick-panel .last-trick-title' },
+  history: { bodyClass: 'mobile-history-open', button: 'btn-hud-history', title: '#round-history-panel .round-history-title' }
+};
 
-  const toggle = () => {
-    document.body.classList.toggle('mobile-history-open');
-  };
-
-  title.addEventListener('click', () => {
-    if (!isPhoneUi()) return;
-    toggle();
-  });
-
-  // Default behavior: on phones, start with history collapsed.
-  let wasPhone = isPhoneUi();
-  if (wasPhone) document.body.classList.remove('mobile-history-open');
-
-  window.addEventListener('resize', () => {
-    const nowPhone = isPhoneUi();
-    if (nowPhone && !wasPhone) {
-      document.body.classList.remove('mobile-history-open');
-    }
-    wasPhone = nowPhone;
-  });
+function syncMobilePopoverButtons() {
+  for (const cfg of Object.values(MOBILE_POPOVERS)) {
+    const btn = document.getElementById(cfg.button);
+    if (btn) btn.setAttribute('aria-pressed', document.body.classList.contains(cfg.bodyClass) ? 'true' : 'false');
+  }
 }
 
-initMobileHistoryToggle();
-
-function initMobileLastTrickToggle() {
-  const title = document.querySelector('#last-trick-panel .last-trick-title');
-  if (!title) return;
-
-  const toggle = () => {
-    document.body.classList.toggle('mobile-lasttrick-collapsed');
-  };
-
-  title.addEventListener('click', () => {
-    if (!isPhoneUi()) return;
-    toggle();
-  });
-
-  // Default behavior: on phones, show "Dernier pli" (not collapsed).
-  let wasPhone = isPhoneUi();
-  if (wasPhone) document.body.classList.remove('mobile-lasttrick-collapsed');
-
-  window.addEventListener('resize', () => {
-    const nowPhone = isPhoneUi();
-    if (nowPhone && !wasPhone) {
-      document.body.classList.remove('mobile-lasttrick-collapsed');
-    }
-    wasPhone = nowPhone;
-  });
+function closeMobilePopovers() {
+  for (const cfg of Object.values(MOBILE_POPOVERS)) document.body.classList.remove(cfg.bodyClass);
+  syncMobilePopoverButtons();
 }
 
-initMobileLastTrickToggle();
+function toggleMobilePopover(key) {
+  const cfg = MOBILE_POPOVERS[key];
+  if (!cfg) return;
+  const willOpen = !document.body.classList.contains(cfg.bodyClass);
+  closeMobilePopovers();
+  if (willOpen) {
+    document.body.classList.remove('chat-open');
+    document.body.classList.add(cfg.bodyClass);
+  }
+  syncMobilePopoverButtons();
+}
+
+function initMobilePopovers() {
+  for (const [key, cfg] of Object.entries(MOBILE_POPOVERS)) {
+    const btn = document.getElementById(cfg.button);
+    if (btn) btn.addEventListener('click', () => toggleMobilePopover(key));
+
+    // Sur téléphone, toucher le titre du panneau le referme.
+    const title = document.querySelector(cfg.title);
+    if (title) {
+      title.addEventListener('click', () => {
+        if (!isPhoneUi()) return;
+        document.body.classList.remove(cfg.bodyClass);
+        syncMobilePopoverButtons();
+      });
+    }
+  }
+  syncMobilePopoverButtons();
+}
+
+initMobilePopovers();
 
 // Position mapping relative to player's perspective
 function getRelativePosition(pos) {
@@ -484,7 +487,17 @@ function getBackTextureUrl() {
 
 function applyBackTextureCssVar() {
   if (!CARD_TEXTURES.enabled) return;
-  document.documentElement.style.setProperty('--card-back-image', `url("${getBackTextureUrl()}")`);
+  const url = getBackTextureUrl();
+  const img = new Image();
+  img.onload = () => {
+    if (getBackTextureUrl() !== url) return;
+    document.documentElement.style.setProperty('--card-back-image', `url("${url}")`);
+  };
+  img.onerror = () => {
+    if (getBackTextureUrl() !== url) return;
+    document.documentElement.style.setProperty('--card-back-image', 'none');
+  };
+  img.src = url;
 }
 
 function applyCardFaceTexture(el, card) {
@@ -819,14 +832,29 @@ function startTrickCollectAnimation(trick, winnerAbsPos) {
 
   // Render the completed trick back into the center so we can animate the collection.
   const absToVisual = getAbsToVisual();
+  const shownKeys = {};
+  for (const visualPos of ['sud', 'nord', 'est', 'ouest']) {
+    const existing = document.querySelector(`#trick-${visualPos} .card`);
+    shownKeys[visualPos] = existing ? existing.dataset.cardKey : null;
+  }
   clearCenterTrickSlots();
 
   for (const play of trick) {
     const visualPos = absToVisual[play.player];
     const slot = document.getElementById(`trick-${visualPos}`);
     if (!slot) continue;
-    slot.innerHTML = '';
-    slot.appendChild(createTrickCard(play.card));
+    const key = `${play.card.suit}-${play.card.rank}`;
+    // Pas de nouvelle animation d'entrée si la carte était déjà affichée au centre.
+    const alreadyShown = shownKeys[visualPos] === key;
+    const flyingFromMyHand = playCardAnim.running && playCardAnim.pendingKey === key;
+    const cardEl = (alreadyShown || flyingFromMyHand) ? createTrickCardNoEntrance(play.card) : createTrickCard(play.card);
+    if (flyingFromMyHand) {
+      // Ma carte est encore en vol : on l'affiche à l'atterrissage.
+      cardEl.style.visibility = 'hidden';
+      setTimeout(() => { cardEl.style.visibility = ''; }, PLAY_CARD_ANIM_MS);
+    }
+    if (play.player === winnerAbsPos) cardEl.classList.add('trick-winner');
+    slot.appendChild(cardEl);
   }
 
   const winnerVisualPos = absToVisual[winnerAbsPos];
@@ -922,7 +950,9 @@ function startTrickCollectAnimation(trick, winnerAbsPos) {
       const queued = trickCollect.queuedState;
       trickCollect.queuedState = null;
       if (queued) {
+        const previousState = gameState;
         gameState = queued;
+        playStateTransitionEffects(previousState, queued);
       }
       updateDisplay();
     });
@@ -938,6 +968,287 @@ function createCardBacks(count) {
     html += `<div class="card-back${texturedClass}"></div>`;
   }
   return html;
+}
+
+
+// ============================================================
+// EFFETS VISUELS (distribution, annonces, bannières)
+// Tout est en transform/opacity pour rester fluide sur mobile.
+// ============================================================
+
+// Distribution 3-2-3 : 12 paquets, un toutes les DEAL_PACKET_STAGGER_MS.
+// La durée totale doit rester < DEAL_ANIMATION_MS côté serveur (server.js).
+const DEAL_PACKET_STAGGER_MS = 85;
+const DEAL_CARD_SPREAD_MS = 28;
+const DEAL_FLIGHT_MS = 340;
+const DEAL_PACKETS = [3, 2, 3];
+const DEAL_TOTAL_MS = 11 * DEAL_PACKET_STAGGER_MS + 2 * DEAL_CARD_SPREAD_MS + DEAL_FLIGHT_MS;
+const SEAT_ORDER = ['sud', 'ouest', 'nord', 'est'];
+
+let dealAnim = { id: null, start: 0, dealer: null, timer: null };
+
+const prefersReducedMotion = () =>
+  !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+
+function isDealing() {
+  return dealAnim.id !== null && (performance.now() - dealAnim.start) < DEAL_TOTAL_MS;
+}
+
+function getDealSeatOrder(dealer) {
+  const idx = Math.max(0, SEAT_ORDER.indexOf(dealer));
+  return [1, 2, 3, 4].map(k => SEAT_ORDER[(idx + k) % 4]);
+}
+
+// Délai (ms depuis le début de la donne) auquel la carte n°cardIndex du joueur absPos part du paquet.
+function getDealDelay(absPos, cardIndex) {
+  const seatIdx = Math.max(0, getDealSeatOrder(dealAnim.dealer).indexOf(absPos));
+  let round = 0;
+  let packetStart = 0;
+  while (round < DEAL_PACKETS.length - 1 && cardIndex >= packetStart + DEAL_PACKETS[round]) {
+    packetStart += DEAL_PACKETS[round];
+    round++;
+  }
+  const packetIdx = round * 4 + seatIdx;
+  return packetIdx * DEAL_PACKET_STAGGER_MS + (cardIndex - packetStart) * DEAL_CARD_SPREAD_MS;
+}
+
+function getDeckCenter() {
+  const deck = document.getElementById('deal-deck');
+  const rect = deck ? deck.getBoundingClientRect() : null;
+  if (rect && rect.width > 0) return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+  return { x: window.innerWidth / 2, y: window.innerHeight / 2 };
+}
+
+// Applique l'animation "vol depuis le paquet" aux éléments (cartes de ma main ou dos adverses).
+function applyDealAnimation(elements, absPos) {
+  if (!isDealing() || !elements.length) return;
+  const elapsed = performance.now() - dealAnim.start;
+  const deck = getDeckCenter();
+  // Lecture groupée des positions (un seul calcul de layout).
+  const rects = elements.map(el => el.getBoundingClientRect());
+
+  elements.forEach((el, i) => {
+    const r = rects[i];
+    if (!r.width) return;
+    const delay = getDealDelay(absPos, i) - elapsed;
+    if (delay + DEAL_FLIGHT_MS <= 0) return;
+    el.style.setProperty('--deal-dx', `${Math.round(deck.x - (r.left + r.width / 2))}px`);
+    el.style.setProperty('--deal-dy', `${Math.round(deck.y - (r.top + r.height / 2))}px`);
+    el.style.setProperty('--deal-rot', `${((i * 47) % 36) - 18}deg`);
+    el.style.setProperty('--deal-delay', `${Math.round(delay)}ms`);
+    el.classList.add('deal-in');
+  });
+}
+
+function getSeatInfoElement(absPos) {
+  const visualPos = getAbsToVisual()[absPos];
+  const nameEl = visualPos ? document.getElementById(`name-${visualPos}`) : null;
+  return nameEl ? nameEl.parentElement : null;
+}
+
+// Pour les joueurs dont la main n'est pas affichée (téléphone), on fait voler un paquet vers leur pastille.
+function spawnDealGhosts() {
+  const layer = getOrCreateTrickAnimationLayer();
+  const deck = getDeckCenter();
+  const texturedClass = CARD_TEXTURES.enabled ? ' card-back--textured' : '';
+
+  for (const absPos of SEAT_ORDER) {
+    if (absPos === myPosition) continue;
+    const visualPos = getAbsToVisual()[absPos];
+    const handEl = document.getElementById(`hand-${visualPos}`);
+    if (handEl && handEl.offsetParent !== null) continue; // main visible : animée directement
+
+    const target = getSeatInfoElement(absPos);
+    if (!target) continue;
+    const tr = target.getBoundingClientRect();
+    if (!tr.width) continue;
+    const dx = tr.left + tr.width / 2 - deck.x;
+    const dy = tr.top + tr.height / 2 - deck.y;
+
+    let packetStart = 0;
+    DEAL_PACKETS.forEach((size) => {
+      const ghost = document.createElement('div');
+      ghost.className = `card-back deal-ghost${texturedClass}`;
+      ghost.style.left = `${deck.x}px`;
+      ghost.style.top = `${deck.y}px`;
+      ghost.style.opacity = '0';
+      layer.appendChild(ghost);
+      const anim = ghost.animate(
+        [
+          { transform: 'translate(0px, 0px) rotate(0deg) scale(1)', opacity: 1 },
+          { transform: `translate(${dx}px, ${dy}px) rotate(${dx > 0 ? 90 : -90}deg) scale(0.7)`, opacity: 0.15 }
+        ],
+        { duration: DEAL_FLIGHT_MS, delay: getDealDelay(absPos, packetStart), easing: 'cubic-bezier(0.2, 0.9, 0.2, 1)', fill: 'backwards' }
+      );
+      packetStart += size;
+      anim.finished.catch(() => null).then(() => ghost.remove());
+    });
+  }
+}
+
+function startDealAnimation(state) {
+  if (prefersReducedMotion() || typeof Element.prototype.animate !== 'function') return;
+  if (dealAnim.timer) clearTimeout(dealAnim.timer);
+  dealAnim = { id: state.dealId, start: performance.now(), dealer: state.dealer, timer: null };
+  document.body.classList.add('is-dealing');
+  dealAnim.timer = setTimeout(() => {
+    document.body.classList.remove('is-dealing');
+    dealAnim.id = null;
+  }, DEAL_TOTAL_MS + 60);
+}
+
+// ---- Pops au-dessus des sièges ----
+function showSeatPop(absPos, text, variant = 'bid', delayMs = 0) {
+  const show = () => {
+    const anchor = getSeatInfoElement(absPos);
+    if (!anchor) return;
+    const rect = anchor.getBoundingClientRect();
+    if (!rect.width) return;
+    const visualPos = getAbsToVisual()[absPos];
+    const pop = document.createElement('div');
+    pop.className = `seat-pop pop-${variant}`;
+    pop.textContent = text;
+    const x = Math.min(Math.max(rect.left + rect.width / 2, 70), window.innerWidth - 70);
+    const y = visualPos === 'nord' ? rect.bottom + 22 : rect.top - 16;
+    pop.style.left = `${Math.round(x)}px`;
+    pop.style.top = `${Math.round(y)}px`;
+    pop.addEventListener('animationend', () => pop.remove());
+    document.body.appendChild(pop);
+    // Sécurité si animationend n'est pas émis (onglet caché, motion réduit...)
+    setTimeout(() => pop.remove(), 2200);
+  };
+  if (delayMs > 0) setTimeout(show, delayMs); else show();
+}
+
+function showCenterBanner(text, variant = 'contract', subtitle = '') {
+  document.querySelectorAll('.center-banner').forEach(el => el.remove());
+  const banner = document.createElement('div');
+  banner.className = `center-banner banner-${variant}`;
+  banner.textContent = text;
+  if (subtitle) {
+    const sub = document.createElement('small');
+    sub.textContent = subtitle;
+    banner.appendChild(sub);
+  }
+  banner.addEventListener('animationend', () => banner.remove());
+  document.body.appendChild(banner);
+  setTimeout(() => banner.remove(), 2400);
+}
+
+function bumpElement(el) {
+  if (!el) return;
+  el.classList.remove('bump');
+  void el.offsetWidth; // relance l'animation
+  el.classList.add('bump');
+}
+
+const SUIT_SHORT = {
+  coeur: '♥', carreau: '♦', trefle: '♣', pique: '♠', 'tout-atout': 'TA', 'sans-atout': 'SA'
+};
+
+function shortBidLabel(points) {
+  if (points === 250) return 'Capot';
+  if (points === 270) return 'Capot B.';
+  if (points === 500) return 'Générale';
+  return String(points);
+}
+
+// Fin de manche : on laisse voir le dernier pli + la bannière avant l'écran de résultat.
+const ROUND_END_REVEAL_MS = 1700;
+let roundEndRevealAt = 0;
+let roundEndRevealTimer = null;
+
+function isRevealingRoundEnd() {
+  return performance.now() < roundEndRevealAt;
+}
+
+// Compare deux états successifs et déclenche les effets correspondants.
+function playStateTransitionEffects(prev, next) {
+  if (!prev || !next || prev.roomId !== next.roomId) return;
+  const sameDeal = prev.dealId === next.dealId;
+
+  // Nouvelle donne -> animation de distribution.
+  if (!sameDeal && next.state === 'bidding') {
+    startDealAnimation(next);
+  }
+
+  // Nouvelles annonces.
+  let bigBannerShown = false;
+  if (sameDeal && Array.isArray(next.bids) && Array.isArray(prev.bids) && next.bids.length > prev.bids.length) {
+    for (const bid of next.bids.slice(prev.bids.length)) {
+      if (!bid) continue;
+      const who = next.players?.[bid.player]?.name || '';
+      if (bid.type === 'pass') {
+        showSeatPop(bid.player, 'Passe', 'pass');
+      } else if (bid.type === 'coinche') {
+        showSeatPop(bid.player, 'COINCHE !', 'coinche');
+        showCenterBanner('COINCHE !', 'coinche', who);
+        bigBannerShown = true;
+      } else if (bid.type === 'surcoinche') {
+        showSeatPop(bid.player, 'SURCOINCHE !', 'surcoinche');
+        showCenterBanner('SURCOINCHE !', 'surcoinche', who);
+        bigBannerShown = true;
+      } else if (bid.type === 'bid') {
+        showSeatPop(bid.player, `${shortBidLabel(bid.points)} ${SUIT_SHORT[bid.suit] || ''}`.trim(), 'bid');
+        // Annonces spéciales : capot, capot beloté, générale.
+        const special = { 250: 'CAPOT !', 270: 'CAPOT BELOTÉ !', 500: 'GÉNÉRALE !' }[bid.points];
+        if (special) {
+          showCenterBanner(special, 'special', who);
+          bigBannerShown = true;
+        }
+      }
+    }
+  }
+
+  // Fin des enchères -> bannière du contrat (après la bannière coinche/surcoinche le cas échéant).
+  if (prev.state === 'bidding' && next.state === 'playing' && next.contract) {
+    let text = `${shortBidLabel(next.contract.points)} ${SUIT_SHORT[next.contract.suit] || ''}`.trim();
+    if (next.contract.surcoinched) text += ' ×3';
+    else if (next.contract.coinched) text += ' ×2';
+    if (bigBannerShown) setTimeout(() => showCenterBanner(text, 'contract'), 1300);
+    else showCenterBanner(text, 'contract');
+  }
+
+  // Belote / Rebelote.
+  if (sameDeal && next.beloteAnnounced && prev.beloteAnnounced) {
+    const lastPlay = Array.isArray(next.playHistory) && next.playHistory.length
+      ? next.playHistory[next.playHistory.length - 1]
+      : null;
+    for (const team of ['ns', 'eo']) {
+      const before = prev.beloteAnnounced[team] || {};
+      const after = next.beloteAnnounced[team] || {};
+      for (const suit of Object.keys(after)) {
+        if (after[suit] !== before[suit] && lastPlay) {
+          showSeatPop(lastPlay.player, after[suit] === 'rebelote' ? 'Rebelote !' : 'Belote !', 'belote');
+        }
+      }
+    }
+  }
+
+  // Pli remporté -> "+N" au-dessus du gagnant.
+  const prevSig = getTrickSignature(prev.lastTrick);
+  const nextSig = getTrickSignature(next.lastTrick);
+  if (sameDeal && nextSig && nextSig !== prevSig && next.lastTrickWinner && next.roundPoints && prev.roundPoints) {
+    const team = getTeamFromPos(next.lastTrickWinner);
+    const gained = (next.roundPoints[team] || 0) - (prev.roundPoints[team] || 0);
+    if (gained >= 0) showSeatPop(next.lastTrickWinner, `+${gained}`, 'points', TRICK_COLLECT_DELAY_MS);
+  }
+
+  // Fin de manche -> bannière réussite / chute, puis écran de résultat.
+  if (prev.state === 'playing' && (next.state === 'scoring' || next.state === 'finished')) {
+    const last = Array.isArray(next.roundHistory) ? next.roundHistory[0] : null;
+    if (last) {
+      showCenterBanner(last.contractMet ? 'Contrat réussi !' : 'Contrat chuté !', last.contractMet ? 'success' : 'fail');
+    }
+    if (!prefersReducedMotion()) {
+      roundEndRevealAt = performance.now() + ROUND_END_REVEAL_MS;
+      if (roundEndRevealTimer) clearTimeout(roundEndRevealTimer);
+      roundEndRevealTimer = setTimeout(() => {
+        roundEndRevealTimer = null;
+        if (gameState) updateDisplay();
+      }, ROUND_END_REVEAL_MS + 20);
+    }
+  }
 }
 
 // ---- Draggable UI panels ----
@@ -1299,6 +1610,17 @@ document.getElementById('btn-create').addEventListener('click', () => {
   socket.emit('create-room', { name, position, texturePack: getPreferredTexturePackForRequest() });
 });
 
+// Type d'IA à ajouter (Legacy / Règles), mémorisé entre les parties.
+const BOT_MODE_STORAGE_KEY = 'coinche:bot-mode';
+(() => {
+  const select = document.getElementById('bot-mode-select');
+  if (!select) return;
+  try {
+    const saved = localStorage.getItem(BOT_MODE_STORAGE_KEY);
+    if (saved === 'rule' || saved === 'legacy') select.value = saved;
+  } catch { /* ignore */ }
+})();
+
 const addBotBtn = document.getElementById('btn-add-bot');
 if (addBotBtn) {
   addBotBtn.addEventListener('click', () => {
@@ -1309,7 +1631,10 @@ if (addBotBtn) {
       if (!ok) return;
       addBotWarningShown = true;
     }
-    socket.emit('add-bot', { name: 'IA' });
+    const modeSelect = document.getElementById('bot-mode-select');
+    const mode = modeSelect && modeSelect.value === 'rule' ? 'rule' : 'legacy';
+    try { localStorage.setItem(BOT_MODE_STORAGE_KEY, mode); } catch { /* ignore */ }
+    socket.emit('add-bot', { mode });
   });
 }
 
@@ -1388,10 +1713,14 @@ function renderPublicRooms(rooms) {
 
     const meta = document.createElement('div');
     meta.className = 'public-room-meta';
-    meta.innerHTML = `
-      <div class="public-room-title">${room.roomName || room.displayCode || room.roomId}</div>
-      <div class="public-room-subtitle">${room.playerCount}/4 joueurs · ${room.freeSeats} place(s) libre(s)</div>
-    `;
+    // Le nom de salle est choisi par un joueur : texte uniquement, jamais en HTML.
+    const title = document.createElement('div');
+    title.className = 'public-room-title';
+    title.textContent = String(room.roomName || room.displayCode || room.roomId || '');
+    const subtitle = document.createElement('div');
+    subtitle.className = 'public-room-subtitle';
+    subtitle.textContent = `${Number(room.playerCount) || 0}/4 joueurs · ${Number(room.freeSeats) || 0} place(s) libre(s)`;
+    meta.append(title, subtitle);
 
     const joinBtn = document.createElement('button');
     joinBtn.className = 'btn btn-secondary btn-sm';
@@ -1596,7 +1925,12 @@ socket.on('texture-pack', (data) => {
 // game-state handled below with transition detection
 
 // ---- Messages ----
+// Sur téléphone, ces messages sont déjà représentés par des animations (pops / bannières) :
+// on évite de les empiler en plus sur la table.
+const PHONE_REDUNDANT_MESSAGE = /remporte le pli|COINCHE|Contrat:|Contrat réussi|Contrat chuté|: (belote|rebelote) !|rejoint la salle|a créé la salle|La partie commence|Nouvelle manche/i;
+
 function addMessage(text, type = 'info') {
+  if (isPhoneUi() && PHONE_REDUNDANT_MESSAGE.test(String(text || ''))) return;
   const container = document.getElementById('messages');
   const div = document.createElement('div');
   div.className = `message ${type}`;
@@ -1646,12 +1980,28 @@ function sendChatMessage() {
 }
 
 // ---- Game Display ----
+// Points d'accroche pour les modules d'interface chargés après ce fichier
+// (public/teams.js, public/stats.js, public/emotes.js...). Chaque fonction de
+// uiHooks.afterUpdate est appelée après chaque mise à jour de l'affichage.
+const uiHooks = { afterUpdate: [] };
+
+function runAfterUpdateHooks() {
+  for (const fn of uiHooks.afterUpdate) {
+    try {
+      fn(gameState);
+    } catch (err) {
+      console.error('[uiHooks] erreur :', err);
+    }
+  }
+}
+
 function updateDisplay() {
   if (!gameState) return;
 
   if (gameState.state === 'waiting') {
     showScreen('waiting');
     updateWaitingRoom();
+    runAfterUpdateHooks();
     return;
   }
 
@@ -1666,33 +2016,92 @@ function updateDisplay() {
   updateRoundHistory();
   updateTurnIndicator();
   updateRoundResult();
+  runAfterUpdateHooks();
 }
 
 function updateWaitingRoom() {
   const posNames = { sud: 'Sud', nord: 'Nord', est: 'Est', ouest: 'Ouest' };
 
-  const addBotBtn = document.getElementById('btn-add-bot');
-  if (addBotBtn) {
+  const addBotControls = document.getElementById('add-bot-controls');
+  if (addBotControls) {
     const canAddBot = isRoomOwner && gameState?.state === 'waiting';
-    addBotBtn.classList.toggle('hidden', !canAddBot);
+    addBotControls.classList.toggle('hidden', !canAddBot);
   }
+
+  const me = gameState.myPosition || myPosition;
+  const canMove = gameState.state === 'waiting';
 
   for (const pos of ['sud', 'nord', 'est', 'ouest']) {
     const slot = document.getElementById(`slot-${pos}`);
     const nameEl = slot.querySelector('.slot-name');
-    if (gameState.players[pos]) {
-      nameEl.textContent = `${gameState.players[pos].name} (${posNames[pos] || pos})`;
-      slot.classList.add('occupied');
+    const isFree = !gameState.players[pos];
+    const isMine = pos === me;
+
+    if (!isFree) {
+      const player = gameState.players[pos];
+      const suffix = isMine ? ' (moi)' : '';
+      const aiTag = player.ai ? ` · IA ${player.ai === 'rule' ? 'Règles' : 'Legacy'}` : '';
+      const showTag = player.ai && !/legacy|règles/i.test(player.name);
+      nameEl.textContent = `${player.name}${suffix}${showTag ? aiTag : ''}`;
     } else {
-      nameEl.textContent = 'En attente...';
-      slot.classList.remove('occupied');
+      nameEl.textContent = canMove ? 'Libre, clique pour t\'y placer' : 'En attente...';
+    }
+
+    slot.classList.toggle('occupied', !isFree);
+    slot.classList.toggle('mine', isMine);
+    slot.classList.toggle('free', isFree && canMove);
+    if (isFree && canMove) {
+      slot.setAttribute('role', 'button');
+      slot.setAttribute('tabindex', '0');
+      slot.setAttribute('aria-label', `Se placer en ${posNames[pos] || pos}`);
+    } else {
+      slot.removeAttribute('role');
+      slot.removeAttribute('tabindex');
+      slot.removeAttribute('aria-label');
     }
   }
 }
 
+// Clic (ou Entrée / Espace) sur un siège libre de la salle d'attente : on s'y place.
+function requestSeatChange(pos) {
+  if (!gameState || gameState.state !== 'waiting') return;
+  if (gameState.players[pos]) return;
+  socket.emit('change-seat', { position: pos });
+}
+
+for (const pos of ['sud', 'nord', 'est', 'ouest']) {
+  const slot = document.getElementById(`slot-${pos}`);
+  if (!slot) continue;
+  slot.addEventListener('click', () => requestSeatChange(pos));
+  slot.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      requestSeatChange(pos);
+    }
+  });
+}
+
+socket.on('seat-changed', (data) => {
+  if (!data || !data.position) return;
+  myPosition = data.position;
+  if (typeof data.isOwner === 'boolean') isRoomOwner = data.isOwner;
+  saveLobbySession(data);
+  if (gameState) updateDisplay();
+});
+
+function setTextWithBump(id, value) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  const text = String(value);
+  if (el.textContent === text) return;
+  const hadValue = el.textContent !== '';
+  el.textContent = text;
+  if (hadValue) bumpElement(el);
+}
+
 function updateScoreboard() {
-  document.getElementById('score-ns').textContent = gameState.scores.ns;
-  document.getElementById('score-eo').textContent = gameState.scores.eo;
+  setTextWithBump('score-ns', gameState.scores.ns);
+  setTextWithBump('score-eo', gameState.scores.eo);
 }
 
 function updatePlayers() {
@@ -1719,9 +2128,17 @@ function updatePlayers() {
       cardsEl.textContent = gameState.cardsLeft[absPos] || 0;
     }
 
-    // Card backs for other players
+    // Card backs for other players (re-rendered only when the count changes)
     if (handEl && absPos !== myPosition) {
-      handEl.innerHTML = createCardBacks(gameState.cardsLeft[absPos] || 0);
+      const count = gameState.cardsLeft[absPos] || 0;
+      const key = `${absPos}:${count}:${dealAnim.id ?? ''}`;
+      if (handEl.dataset.renderKey !== key) {
+        handEl.dataset.renderKey = key;
+        handEl.innerHTML = createCardBacks(count);
+        if (isDealing() && handEl.offsetParent !== null) {
+          applyDealAnimation(Array.from(handEl.children), absPos);
+        }
+      }
     }
 
     // Active indicator
@@ -1838,8 +2255,13 @@ function updateTrick() {
 
   // Build desired state for current trick per visual position.
   const desiredCurrent = { sud: null, nord: null, est: null, ouest: null };
-  if (gameState.currentTrick && gameState.currentTrick.length > 0) {
-    for (const play of gameState.currentTrick) {
+  const showFinalTrick =
+    (gameState.state === 'scoring' || gameState.state === 'finished') &&
+    isRevealingRoundEnd() &&
+    Array.isArray(gameState.lastTrick) && gameState.lastTrick.length === 4;
+  const centerTrick = showFinalTrick ? gameState.lastTrick : gameState.currentTrick;
+  if (centerTrick && centerTrick.length > 0) {
+    for (const play of centerTrick) {
       // If we are animating our played card hand->center, don't render it in the trick area yet.
       if (
         playCardAnim.running &&
@@ -1927,13 +2349,30 @@ function updateHand() {
     });
   }
 
-  for (const card of gameState.hand) {
+  const isMyPlayTurn = gameState.state === 'playing' && gameState.currentPlayer === myPosition;
+  myHand.classList.toggle('is-my-turn', isMyPlayTurn);
+
+  // Éventail : légère rotation + arc selon la position de la carte dans la main.
+  const n = gameState.hand.length;
+  const mid = (n - 1) / 2;
+  const phone = isMobilePortraitGameplay();
+  const rotStep = phone ? 2.4 : 3;
+  const arc = phone ? 1.6 : 2.2;
+  const cardEls = [];
+
+  gameState.hand.forEach((card, i) => {
     const key = `${card.suit}-${card.rank}`;
-    const isPlayable = gameState.state === 'playing' &&
-      gameState.currentPlayer === myPosition &&
-      playableSet.has(key);
-    myHand.appendChild(createCardElement(card, isPlayable));
-  }
+    const isPlayable = isMyPlayTurn && playableSet.has(key);
+    const el = createCardElement(card, isPlayable);
+    const offset = i - mid;
+    el.style.setProperty('--fan-rot', `${(offset * rotStep).toFixed(2)}deg`);
+    // Arc vers le haut : la carte du milieu est la plus haute, les bords restent en place.
+    el.style.setProperty('--fan-y', `${((offset * offset - mid * mid) * arc).toFixed(1)}px`);
+    myHand.appendChild(el);
+    cardEls.push(el);
+  });
+
+  if (isDealing()) applyDealAnimation(cardEls, myPosition);
 }
 
 function updateBidding() {
@@ -1960,19 +2399,24 @@ function updateBidding() {
     for (const bid of gameState.bids) {
       const div = document.createElement('div');
       const name = gameState.players[bid.player] ? gameState.players[bid.player].name : posNames[bid.player];
+      let label = '';
       if (bid.type === 'pass') {
         div.className = 'bid-entry';
-        div.innerHTML = `<strong>${name}</strong> passe`;
+        label = 'passe';
       } else if (bid.type === 'coinche') {
         div.className = 'bid-entry coinche';
-        div.innerHTML = `<strong>${name}</strong> COINCHE !`;
+        label = 'COINCHE !';
       } else if (bid.type === 'surcoinche') {
         div.className = 'bid-entry surcoinche';
-        div.innerHTML = `<strong>${name}</strong> SURCOINCHE !`;
+        label = 'SURCOINCHE !';
       } else if (bid.type === 'bid') {
-        div.className = 'bid-entry';
-        div.innerHTML = `<strong>${name}</strong> ${formatBidPoints(bid.points)} ${suitNames[bid.suit] || bid.suit}`;
+        div.className = 'bid-entry is-bid';
+        label = `${formatBidPoints(bid.points)} ${suitNames[bid.suit] || bid.suit}`;
       }
+      // Le nom vient d'un autre joueur : toujours en texte, jamais en HTML.
+      const strong = document.createElement('strong');
+      strong.textContent = String(name ?? '');
+      div.append(strong, ` ${label}`);
       history.appendChild(div);
     }
     history.scrollTop = history.scrollHeight;
@@ -1990,13 +2434,14 @@ function updateBidding() {
   }
 
   // Coinche: only if opponent bid and no coinche yet
-  const canCoinche = isMyTurn && gameState.contract &&
+  // Coinche / surcoinche : possibles à tout moment des enchères, sans attendre son tour.
+  const canCoinche = !!gameState.contract &&
     getTeamFromPos(gameState.contract.player) !== getTeamFromPos(myPosition) &&
     !gameState.bids.some(b => b.type === 'coinche');
   document.getElementById('btn-coinche').disabled = !canCoinche;
 
   // Surcoinche
-  const canSurcoinche = isMyTurn &&
+  const canSurcoinche =
     gameState.bids.some(b => b.type === 'coinche') &&
     !gameState.bids.some(b => b.type === 'surcoinche') &&
     gameState.contract &&
@@ -2041,6 +2486,7 @@ function updateContract() {
     if (gameState.contract.coinched) text += ' (COINCHÉ)';
     if (gameState.contract.surcoinched) text += ' (SURCOINCÉ)';
     el.querySelector('#contract-text').textContent = text;
+    el.classList.toggle('is-coinched', !!(gameState.contract.coinched || gameState.contract.surcoinched));
   } else {
     el.classList.add('hidden');
   }
@@ -2048,8 +2494,8 @@ function updateContract() {
 
 function updateRoundPoints() {
   if (gameState.roundPoints) {
-    document.getElementById('round-ns').textContent = gameState.roundPoints.ns;
-    document.getElementById('round-eo').textContent = gameState.roundPoints.eo;
+    setTextWithBump('round-ns', gameState.roundPoints.ns);
+    setTextWithBump('round-eo', gameState.roundPoints.eo);
   }
 }
 
@@ -2060,8 +2506,18 @@ function updateTurnIndicator() {
     return;
   }
 
+  const isMe = gameState.currentPlayer === myPosition &&
+    (gameState.state === 'bidding' || gameState.state === 'playing');
+  el.classList.toggle('is-me', isMe);
+
+  if (gameState.state !== 'bidding' && gameState.state !== 'playing') {
+    el.textContent = '';
+    el.classList.remove('is-me');
+    return;
+  }
+
   if (gameState.currentPlayer === myPosition) {
-    el.textContent = gameState.state === 'bidding' ? '🎯 À vous d\'enchérir !' : '🎯 À vous de jouer !';
+    el.textContent = gameState.state === 'bidding' ? 'À vous d\'annoncer !' : 'À vous de jouer !';
   } else {
     const name = gameState.players[gameState.currentPlayer]
       ? gameState.players[gameState.currentPlayer].name
@@ -2073,7 +2529,7 @@ function updateTurnIndicator() {
 function updateRoundResult() {
   const panel = document.getElementById('round-result');
 
-  if (gameState.state === 'scoring' || gameState.state === 'finished') {
+  if ((gameState.state === 'scoring' || gameState.state === 'finished') && !isRevealingRoundEnd()) {
     showRoundResult(gameState);
   } else {
     panel.classList.add('hidden');
@@ -2158,7 +2614,9 @@ socket.on('game-state', (state) => {
     nextSig !== prevSig &&
     nextSig !== trickCollect.lastAnimatedSig;
 
+  const previousState = gameState;
   gameState = state;
+  playStateTransitionEffects(previousState, state);
   updateDisplay();
 
   if (shouldAnimate) {
