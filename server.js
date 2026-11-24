@@ -373,6 +373,51 @@ function addBotAtPosition(roomId, game, position, botName = '', aiMode = 'legacy
   return { success: true };
 }
 
+// ============================================================
+// Noms d'équipe (point d'accroche unique pour tous les messages)
+// ============================================================
+const DEFAULT_TEAM_NAMES = { ns: 'Nord-Sud', eo: 'Est-Ouest' };
+
+function getTeamDisplayName(game, team) {
+  // [feature:teams] utiliser ici les noms d'équipe personnalisés.
+  return DEFAULT_TEAM_NAMES[team] || team;
+}
+
+// ============================================================
+// Fin de manche / de partie : point d'accroche unique
+// (appelé que la dernière carte soit jouée par un humain ou une IA)
+// ============================================================
+function onRoundFinished(roomId, game, result) {
+  // result.action : 'round_end' | 'game_over' ; result.roundResult ; result.winner ('ns'|'eo') si game_over.
+  // [feature:stats] enregistrer ici les statistiques des joueurs.
+}
+
+// Messages consécutifs à une carte jouée (humain ou IA).
+function announcePlayResult(roomId, game, position, result) {
+  const actorName = getSafePlayerName(game, position);
+  if (result.beloteAnnounce) {
+    broadcastMessage(roomId, `${actorName}: ${result.beloteAnnounce} !`, 'success');
+  }
+  if (result.action === 'trick_complete') {
+    const winnerName = getSafePlayerName(game, result.winner);
+    broadcastMessage(roomId, `${winnerName} remporte le pli (+${result.points} pts)`);
+  }
+  if (result.action === 'round_end' || result.action === 'game_over') {
+    const rr = result.roundResult;
+    let msg = rr.contractMet ? '✓ Contrat réussi !' : '✗ Contrat chuté !';
+    msg += ` | ${getTeamDisplayName(game, 'ns')}: +${rr.scoreNS} | ${getTeamDisplayName(game, 'eo')}: +${rr.scoreEO}`;
+    broadcastMessage(roomId, msg, rr.contractMet ? 'success' : 'danger');
+    if (result.action === 'game_over') {
+      broadcastMessage(roomId, `🏆 ${getTeamDisplayName(game, result.winner)} remporte la partie !`, 'success');
+    }
+    try {
+      onRoundFinished(roomId, game, result);
+    } catch (err) {
+      console.error('[onRoundFinished] erreur :', err);
+    }
+  }
+}
+
 // Durées alignées sur les animations client (public/game-client.js).
 const BOT_TURN_DELAY_MS = 450;
 const BOT_AFTER_TRICK_DELAY_MS = 900;
@@ -471,26 +516,7 @@ function runBotTurn(roomId) {
 
     const botName = p.name || 'IA';
 
-    if (result.beloteAnnounce) {
-      broadcastMessage(roomId, `${botName}: ${result.beloteAnnounce} !`, 'success');
-    }
-
-      if (result.action === 'trick_complete') {
-        const winnerName = getSafePlayerName(latest, result.winner);
-        broadcastMessage(roomId, `${winnerName} remporte le pli (+${result.points} pts)`);
-      }
-      if (result.action === 'round_end' || result.action === 'game_over') {
-      const rr = result.roundResult;
-      let msg = rr.contractMet ? '✓ Contrat réussi !' : '✗ Contrat chuté !';
-      msg += ` | NS: +${rr.scoreNS} | EO: +${rr.scoreEO}`;
-      broadcastMessage(roomId, msg, rr.contractMet ? 'success' : 'danger');
-
-      if (result.action === 'game_over') {
-        const teamNames = { ns: 'Nord-Sud', eo: 'Est-Ouest' };
-        const winnerTeam = teamNames[result.winner];
-        broadcastMessage(roomId, `🏆 ${winnerTeam} remporte la partie !`, 'success');
-      }
-    }
+    announcePlayResult(roomId, latest, pos, result);
 
     broadcastGameState(roomId);
     touchRoom(roomId);
@@ -904,26 +930,7 @@ io.on('connection', (socket) => {
       return;
     }
 
-    if (result.beloteAnnounce) {
-      broadcastMessage(currentRoom, `${playerName}: ${result.beloteAnnounce} !`, 'success');
-    }
-
-    if (result.action === 'trick_complete') {
-      const winnerName = getSafePlayerName(game, result.winner);
-      broadcastMessage(currentRoom, `${winnerName} remporte le pli (+${result.points} pts)`);
-    }
-    if (result.action === 'round_end' || result.action === 'game_over') {
-      const rr = result.roundResult;
-      const teamNames = { ns: 'Nord-Sud', eo: 'Est-Ouest' };
-      let msg = rr.contractMet ? '✓ Contrat réussi !' : '✗ Contrat chuté !';
-      msg += ` | NS: +${rr.scoreNS} | EO: +${rr.scoreEO}`;
-      broadcastMessage(currentRoom, msg, rr.contractMet ? 'success' : 'danger');
-
-      if (result.action === 'game_over') {
-        const winnerTeam = teamNames[result.winner];
-        broadcastMessage(currentRoom, `🏆 ${winnerTeam} remporte la partie !`, 'success');
-      }
-    }
+    announcePlayResult(currentRoom, game, position, result);
 
     broadcastGameState(currentRoom);
     touchRoom(currentRoom);
@@ -1034,6 +1041,12 @@ io.on('connection', (socket) => {
     broadcastGameState(currentRoom);
     touchRoom(currentRoom);
   });
+
+  // [feature:teams] gestionnaires socket des noms d'équipe
+
+  // [feature:stats] gestionnaires socket des statistiques
+
+  // [feature:emotes] gestionnaires socket des emotes
 
   on('get-available-positions', (data) => {
     const roomId = sanitizeRoomCode(data.roomId);

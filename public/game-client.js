@@ -1980,12 +1980,28 @@ function sendChatMessage() {
 }
 
 // ---- Game Display ----
+// Points d'accroche pour les modules d'interface chargés après ce fichier
+// (public/teams.js, public/stats.js, public/emotes.js...). Chaque fonction de
+// uiHooks.afterUpdate est appelée après chaque mise à jour de l'affichage.
+const uiHooks = { afterUpdate: [] };
+
+function runAfterUpdateHooks() {
+  for (const fn of uiHooks.afterUpdate) {
+    try {
+      fn(gameState);
+    } catch (err) {
+      console.error('[uiHooks] erreur :', err);
+    }
+  }
+}
+
 function updateDisplay() {
   if (!gameState) return;
 
   if (gameState.state === 'waiting') {
     showScreen('waiting');
     updateWaitingRoom();
+    runAfterUpdateHooks();
     return;
   }
 
@@ -2000,6 +2016,7 @@ function updateDisplay() {
   updateRoundHistory();
   updateTurnIndicator();
   updateRoundResult();
+  runAfterUpdateHooks();
 }
 
 function updateWaitingRoom() {
