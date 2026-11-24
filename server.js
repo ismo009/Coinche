@@ -49,6 +49,10 @@ app.get('/api/emotes', (req, res) => {
 const { createStatsStore, recordRoundOutcome } = require('./lib/stats-store');
 const statsStore = createStatsStore().load();
 statsStore.installExitHandlers();
+// Sauvegarde automatique sur une branche GitHub (indispensable sur Heroku, dont le disque
+// est effacé à chaque déploiement) : activée par STATS_GITHUB_TOKEN + STATS_GITHUB_REPO.
+const { setupGitHubStatsBackup } = require('./lib/stats-github');
+const statsBackup = setupGitHubStatsBackup(statsStore);
 const STATS_API_LIMIT = 500;
 
 app.get('/api/stats', (req, res) => {
@@ -1186,6 +1190,7 @@ io.on('connection', (socket) => {
         emitSystemChatToSocket(socket.id, '/kick Nord|Sud|Est|Ouest - Expulse un joueur de la position (créateur uniquement).');
         emitSystemChatToSocket(socket.id, '/addia Nord|Sud|Est|Ouest [legacy|rule] - Ajoute une IA sur la position (créateur uniquement).');
         emitSystemChatToSocket(socket.id, '/debug rule - Vérifie les fichiers de règles de l\'IA (règles valides / invalides).');
+        emitSystemChatToSocket(socket.id, '/debug stats - État des statistiques et de leur sauvegarde GitHub.');
         emitSystemChatToSocket(socket.id, '/texture [nomPack] - Change votre pack de textures cartes (ou affiche la liste).');
         emitSystemChatToSocket(socket.id, '/team [nom] - Renomme votre équipe (sans nom : nom par défaut).');
       };
@@ -1289,8 +1294,20 @@ io.on('connection', (socket) => {
 
       if (command === 'debug') {
         const sub = (arg.split(/\s+/)[0] || '').toLowerCase();
+        if (sub === 'stats') {
+          emitSystemChatToSocket(socket.id, `Statistiques : ${statsStore.size} joueur(s) enregistré(s).`);
+          if (!statsBackup) {
+            emitSystemChatToSocket(socket.id, 'Sauvegarde GitHub : désactivée (STATS_GITHUB_TOKEN / STATS_GITHUB_REPO non définis).');
+          } else {
+            const st = statsBackup.status;
+            emitSystemChatToSocket(socket.id, `Sauvegarde GitHub : ${statsBackup.describe()}`);
+            emitSystemChatToSocket(socket.id, `Rechargée : ${st.restoredAt || 'non'} | Dernier envoi : ${st.lastSyncAt || 'aucun'} (${st.syncs} envoi(s))`);
+            if (st.lastError) emitSystemChatToSocket(socket.id, `Dernière erreur : ${st.lastError}`);
+          }
+          return;
+        }
         if (sub !== 'rule' && sub !== 'rules') {
-          emitSystemChatToSocket(socket.id, 'Usage: /debug rule');
+          emitSystemChatToSocket(socket.id, 'Usage: /debug rule | /debug stats');
           return;
         }
         // Relit les fichiers depuis le disque (prend en compte un git pull sans redémarrage).

@@ -120,6 +120,36 @@ Les statistiques sont liees au **pseudo** (sans compte ni mot de passe : n'impor
 existant) et enregistrees cote serveur dans `data/stats.json` (chemin modifiable avec la variable d'environnement
 `STATS_FILE`, dossier ignore par git). API JSON : `GET /api/stats` (`?q=` pour chercher un pseudo).
 
+### Conserver les statistiques sur Heroku (sauvegarde GitHub automatique)
+
+Sur Heroku, le disque est efface a chaque deploiement et au redemarrage quotidien du dyno : `data/stats.json`
+disparait. Le serveur peut donc sauvegarder automatiquement les statistiques sur une **branche dediee du depot**
+(`stats-data`, qui ne contient que `stats.json`) et les recharger au demarrage :
+
+- au demarrage : rechargement depuis la branche ;
+- toutes les 5 minutes s'il y a du nouveau, et a l'arret du serveur (Heroku laisse 30 s) : envoi ;
+- deux serveurs actifs en meme temps (pendant un deploiement) additionnent leurs progres, sans rien ecraser ;
+- si GitHub est injoignable, le jeu continue normalement et l'envoi est retente plus tard.
+
+Mise en place (une seule fois) :
+
+1. **Creer un jeton GitHub** : GitHub > Settings > Developer settings > Personal access tokens > *Fine-grained tokens* >
+   *Generate new token*. Repository access : *Only select repositories* > ce depot. Permissions > Repository
+   permissions > **Contents : Read and write**. Noter la date d'expiration (a renouveler).
+2. **Le donner a Heroku** : tableau de bord de l'application > Settings > *Config Vars* :
+   - `STATS_GITHUB_TOKEN` = le jeton ;
+   - `STATS_GITHUB_REPO` = `proprietaire/depot` (ex. `ismo009/Coinche`).
+
+   Ou en ligne de commande : `heroku config:set STATS_GITHUB_TOKEN=... STATS_GITHUB_REPO=ismo009/Coinche`.
+   Heroku redemarre l'application automatiquement.
+3. **Verifier** : dans le chat d'une partie, `/debug stats` affiche l'etat (rechargement, dernier envoi, derniere
+   erreur). La branche `stats-data` apparait sur GitHub apres la premiere statistique enregistree.
+
+Options : `STATS_GITHUB_BRANCH` (defaut `stats-data`), `STATS_GITHUB_PATH` (defaut `stats.json`),
+`STATS_GITHUB_SYNC_MINUTES` (defaut 5). Le deploiement automatique Heroku doit rester sur la branche principale
+(les sauvegardes sur `stats-data` ne declenchent alors aucun deploiement). Si le depot est public, le fichier de
+statistiques l'est aussi (il contient les memes informations que l'onglet Statistiques).
+
 ## Emotes
 
 Pendant une partie ou dans la salle d'attente, le bouton **Emotes** (en haut a droite sur telephone, en bas a gauche
