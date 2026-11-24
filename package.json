@@ -5,7 +5,7 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "test": "node test/run-tests.js && node test/server-robustness.js && node test/teams.test.js && node test/stats.test.js && node test/emotes.test.js",
+    "test": "node test/run-tests.js && node test/server-robustness.js && node test/teams.test.js && node test/stats.test.js && node test/emotes.test.js && node test/stats-github.test.js",
     "compare-ai": "node tools/compare-ai.js",
     "check-emotes": "node tools/check-emotes.js"
   },
@@ -15,5 +15,8 @@
   },
   "devDependencies": {
     "socket.io-client": "^4.8.1"
+  },
+  "engines": {
+    "node": ">=18"
   }
 }
