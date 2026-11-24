@@ -60,10 +60,10 @@
     {
       "id": 4,
       "name": "Soutenir (monter) l'annonce couleur du partenaire",
-      "description": "Comme l'IA legacy : si le partenaire a la meilleure enchère dans une couleur (pas TA/SA) et que le soutien est autorisé (pas de double soutien sans intervention adverse), on monte selon nos atouts (valet +20, 9 +10, as +10 au-delà de 100, belote +20), plafonné à +20.",
+      "description": "Soutenir la couleur du partenaire uniquement si l'IA ne l'a pas déjà annoncée ; une enchère précédente de l'IA dans cette couleur ne doit pas être remontée une seconde fois.",
       "source": "legacy",
       "priority": 80,
-      "when": "partnerRaiseAllowed() && partnerIncrement > 0",
+      "when": "partnerRaiseAllowed() && partnerIncrement > 0 && none(bids, b => b.who == 'me' && b.type == 'bid' && b.suit == current.suit)",
       "action": { "type": "bid", "points": "min(current.points + partnerIncrement, current.points + params.raiseCap)", "suit": "current.suit" }
     },
     {

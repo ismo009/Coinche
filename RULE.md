@@ -287,7 +287,7 @@ Exemple : probabilité que les adversaires (16 cartes inconnues sur 24 au moment
 | `hasBelote(couleur)` | vrai si j'ai roi + dame de la couleur |
 | `defensePotential(contrat)` | points que ma main peut apporter en défense contre ce contrat (heuristique legacy) |
 | `opponentBeloteRisk(contrat, points)` | malus attendu pour une belote adverse (0 si j'ai le roi ou la dame d'atout) |
-| `partnerRaiseAllowed()` | vrai si je peux soutenir l'enchère couleur de mon partenaire (pas de double soutien sans intervention adverse) |
+| `partnerRaiseAllowed()` | vrai si je peux soutenir l'enchère couleur du partenaire (pas de double soutien sans intervention adverse) ; la règle livrée bloque aussi un second soutien si l'IA a déjà annoncé cette couleur |
 | `partnerRaise(couleur, points)` | montée proposée par la règle legacy : valet +20, 9 +10, as +10 (contrats ≥ 100), belote +20 |
 | `relayOvercalled()` | vrai si une couleur relayée par mon partenaire a été surenchérie par l'adversaire |
 | `reclaimBid()` / `reclaimSuit()` | reprise minimale (+10) proposée par la règle legacy, et sa couleur (0 / `null` si non conseillée) |
