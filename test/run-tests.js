@@ -312,6 +312,23 @@ test('les fichiers de règles livrés sont tous valides', () => {
   assert.ok(report.total >= 30);
 });
 
+test('IA règles : ne remonte pas une seconde fois après la remontée du partenaire', () => {
+  const g = newGame();
+  g.dealer = 'est';
+  g.startNewRound();
+  g.placeBid('sud', { type: 'bid', points: 80, suit: 'coeur' });
+  g.placeBid('ouest', { type: 'bid', points: 90, suit: 'coeur' });
+  g.placeBid('nord', { type: 'bid', points: 100, suit: 'coeur' });
+  g.placeBid('est', { type: 'pass' });
+  g.hands.sud = [
+    C('valet', 'coeur'), C('9', 'coeur'), C('7', 'coeur'), C('8', 'coeur'),
+    C('as', 'carreau'), C('7', 'carreau'), C('8', 'trefle'), C('7', 'pique')
+  ];
+
+  assert.strictEqual(g.currentPlayer, 'sud');
+  assert.deepStrictEqual(ruleBot.chooseBid(g), { type: 'pass' });
+});
+
 test('IA règles : ouvre à 80 avec une main risquée mais significative', () => {
   const g = newGame();
   g.startNewRound();
