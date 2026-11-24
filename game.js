@@ -358,6 +358,10 @@ function hasBeloteRebelote(hand, trumpSuit) {
   return (hasKing && hasQueen) ? [trumpSuit] : [];
 }
 
+// Noms d'équipe par défaut (remplaçables par les joueurs via setTeamName).
+const DEFAULT_TEAM_NAMES = { ns: 'Nord-Sud', eo: 'Est-Ouest' };
+const TEAM_NAME_MAX_LENGTH = 24;
+
 function roundScore(value) {
   return Math.round(value / 10) * 10;
 }
@@ -375,6 +379,10 @@ class CoincheGame {
     // Score global (parties)
     this.scores = { ns: 0, eo: 0 };
     this.targetScore = 2000;
+
+    // Noms d'équipe personnalisés (null = nom par défaut). Conservés pendant toute
+    // la vie de la salle, y compris lors d'une « Nouvelle partie ».
+    this.teamNames = { ns: null, eo: null };
 
     // Manche en cours
     this.dealer = 'sud';
@@ -413,6 +421,20 @@ class CoincheGame {
     // Historique détaillé des cartes jouées (utile pour IA serveur)
     // Chaque entrée: { roundNumber, trickNumber, indexInTrick, player, card, contractSuit }
     this.playHistory = [];
+  }
+
+  // Renomme une équipe ('ns' | 'eo'). null / chaîne vide = retour au nom par défaut.
+  // Le nom doit déjà être assaini par l'appelant ; on borne quand même la longueur.
+  setTeamName(team, name) {
+    if (team !== 'ns' && team !== 'eo') return false;
+    const value = typeof name === 'string' ? name.trim().slice(0, TEAM_NAME_MAX_LENGTH) : '';
+    this.teamNames[team] = value || null;
+    return true;
+  }
+
+  // Nom effectif d'une équipe (personnalisé ou défaut).
+  getTeamName(team) {
+    return this.teamNames[team] || DEFAULT_TEAM_NAMES[team] || team;
   }
 
   addPlayer(playerId, playerName, position) {
@@ -851,6 +873,7 @@ class CoincheGame {
       roomId: this.roomId,
       state: this.state,
       targetScore: this.targetScore,
+      teamNames: { ns: this.getTeamName('ns'), eo: this.getTeamName('eo') },
       players: {},
       scores: this.scores,
       dealer: this.dealer,
@@ -913,5 +936,7 @@ module.exports = {
   RANKS,
   getTeam,
   getPartner,
-  getNextPlayer
+  getNextPlayer,
+  DEFAULT_TEAM_NAMES,
+  TEAM_NAME_MAX_LENGTH
 };
