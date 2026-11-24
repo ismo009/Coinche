@@ -1610,6 +1610,17 @@ document.getElementById('btn-create').addEventListener('click', () => {
   socket.emit('create-room', { name, position, texturePack: getPreferredTexturePackForRequest() });
 });
 
+// Type d'IA à ajouter (Legacy / Règles), mémorisé entre les parties.
+const BOT_MODE_STORAGE_KEY = 'coinche:bot-mode';
+(() => {
+  const select = document.getElementById('bot-mode-select');
+  if (!select) return;
+  try {
+    const saved = localStorage.getItem(BOT_MODE_STORAGE_KEY);
+    if (saved === 'rule' || saved === 'legacy') select.value = saved;
+  } catch { /* ignore */ }
+})();
+
 const addBotBtn = document.getElementById('btn-add-bot');
 if (addBotBtn) {
   addBotBtn.addEventListener('click', () => {
@@ -1620,7 +1631,10 @@ if (addBotBtn) {
       if (!ok) return;
       addBotWarningShown = true;
     }
-    socket.emit('add-bot', { name: 'IA' });
+    const modeSelect = document.getElementById('bot-mode-select');
+    const mode = modeSelect && modeSelect.value === 'rule' ? 'rule' : 'legacy';
+    try { localStorage.setItem(BOT_MODE_STORAGE_KEY, mode); } catch { /* ignore */ }
+    socket.emit('add-bot', { mode });
   });
 }
 
@@ -1991,10 +2005,10 @@ function updateDisplay() {
 function updateWaitingRoom() {
   const posNames = { sud: 'Sud', nord: 'Nord', est: 'Est', ouest: 'Ouest' };
 
-  const addBotBtn = document.getElementById('btn-add-bot');
-  if (addBotBtn) {
+  const addBotControls = document.getElementById('add-bot-controls');
+  if (addBotControls) {
     const canAddBot = isRoomOwner && gameState?.state === 'waiting';
-    addBotBtn.classList.toggle('hidden', !canAddBot);
+    addBotControls.classList.toggle('hidden', !canAddBot);
   }
 
   const me = gameState.myPosition || myPosition;
@@ -2007,8 +2021,11 @@ function updateWaitingRoom() {
     const isMine = pos === me;
 
     if (!isFree) {
+      const player = gameState.players[pos];
       const suffix = isMine ? ' (moi)' : '';
-      nameEl.textContent = `${gameState.players[pos].name}${suffix}`;
+      const aiTag = player.ai ? ` · IA ${player.ai === 'rule' ? 'Règles' : 'Legacy'}` : '';
+      const showTag = player.ai && !/legacy|règles/i.test(player.name);
+      nameEl.textContent = `${player.name}${suffix}${showTag ? aiTag : ''}`;
     } else {
       nameEl.textContent = canMove ? 'Libre, clique pour t\'y placer' : 'En attente...';
     }

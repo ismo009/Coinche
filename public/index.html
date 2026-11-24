@@ -101,7 +101,7 @@
 
       <div class="lobby-version-panel">
         <p>Version jeux 1.3.0</p>
-        <p>Version IA : 0.2.0</p>
+        <p>Version IA : 0.3.0 (legacy + règles)</p>
       </div>
     </div>
   </div>
@@ -135,7 +135,12 @@
         <span class="team-ns">Nord ↔ Sud</span> vs <span class="team-eo">Ouest ↔ Est</span>
       </p>
 
-      <div class="waiting-actions">
+      <div class="waiting-actions" id="add-bot-controls">
+        <label class="bot-mode-label" for="bot-mode-select">Type d'IA</label>
+        <select id="bot-mode-select" class="bot-mode-select" aria-label="Type d'IA à ajouter">
+          <option value="legacy">Legacy (IA actuelle)</option>
+          <option value="rule">Règles (rule_*.json)</option>
+        </select>
         <button id="btn-add-bot" class="btn btn-secondary" type="button">Ajouter une IA</button>
       </div>
     </div>

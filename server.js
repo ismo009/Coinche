@@ -5,6 +5,25 @@ const crypto = require('crypto');
 const path = require('path');
 const { CoincheGame, POSITIONS, getTeam } = require('./game');
 const botLogic = require('./ai/coinche-bot');
+const ruleBot = require('./ai/rule-bot');
+const ruleEngine = require('./ai/rules/engine');
+
+// Modes d'IA disponibles : 'legacy' (ai/coinche-bot.js) et 'rule' (ai/rule-bot.js + ai/rules/*.json).
+const AI_MODES = {
+  legacy: { label: 'Legacy', defaultName: 'IA Legacy', logic: botLogic },
+  rule: { label: 'Règles', defaultName: 'IA Règles', logic: ruleBot }
+};
+
+function sanitizeAiMode(raw) {
+  if (typeof raw !== 'string') return 'legacy';
+  const v = raw.trim().toLowerCase();
+  if (v === 'rule' || v === 'rules' || v === 'regle' || v === 'regles' || v === 'règle' || v === 'règles') return 'rule';
+  return 'legacy';
+}
+
+function getBotLogic(player) {
+  return (AI_MODES[player?.aiMode] || AI_MODES.legacy).logic;
+}
 const texturePackConfig = require('./texture-packs');
 
 const app = express();
@@ -330,16 +349,17 @@ function emitSystemChatToSocket(socketId, text) {
   });
 }
 
-function addBotAtPosition(roomId, game, position, botName = 'IA') {
+function addBotAtPosition(roomId, game, position, botName = '', aiMode = 'legacy') {
   if (!game) return { success: false, error: 'Salle introuvable.' };
   if (!POSITIONS.includes(position)) return { success: false, error: 'Position invalide.' };
   if (game.players[position]) return { success: false, error: `La position ${positionLabelFr(position)} est déjà occupée.` };
 
-  const safeName = sanitizePlayerName(typeof botName === 'string' ? botName : '', 'IA');
+  const mode = sanitizeAiMode(aiMode);
+  const safeName = sanitizePlayerName(typeof botName === 'string' ? botName : '', AI_MODES[mode].defaultName);
   const botId = `BOT:${crypto.randomBytes(6).toString('hex')}`;
-  game.players[position] = { id: botId, name: safeName, isBot: true, connected: true };
+  game.players[position] = { id: botId, name: safeName, isBot: true, connected: true, aiMode: mode };
 
-  broadcastMessage(roomId, `${safeName} (IA) rejoint la salle (${position})`, 'info');
+  broadcastMessage(roomId, `${safeName} (IA ${AI_MODES[mode].label}) rejoint la salle (${position})`, 'info');
   broadcastGameState(roomId);
   touchRoom(roomId);
 
@@ -399,8 +419,14 @@ function runBotTurn(roomId) {
   if (!isBotPlayer(p)) return;
 
   if (latest.state === 'bidding') {
-    const bid = botLogic.chooseBid(latest);
-    const result = latest.placeBid(pos, bid);
+    let bid = getBotLogic(p).chooseBid(latest);
+    let result = latest.placeBid(pos, bid);
+    if (!result?.success && bid?.type !== 'pass') {
+      // Annonce refusée (ex. enchère après une coinche) : l'IA passe plutôt que de bloquer la partie.
+      console.warn(`[bot] annonce refusée pour ${pos} (${JSON.stringify(bid)}) : ${result?.error}. L'IA passe.`);
+      bid = { type: 'pass' };
+      result = latest.placeBid(pos, bid);
+    }
     if (result?.success) {
       const botName = p.name || 'IA';
       if (bid.type === 'coinche') {
@@ -431,11 +457,17 @@ function runBotTurn(roomId) {
   }
 
   if (latest.state === 'playing') {
-    const card = botLogic.chooseCard(latest, pos);
-    if (!card) return;
-
-    const result = latest.playCard(pos, card);
-    if (!result?.success) return;
+    let card = getBotLogic(p).chooseCard(latest, pos);
+    let result = card ? latest.playCard(pos, card) : null;
+    if (!result?.success) {
+      // Carte refusée : on joue la première carte jouable plutôt que de bloquer la partie.
+      const fallback = (latest.getStateForPlayer(pos).playableCards || [])[0];
+      console.warn(`[bot] carte refusée pour ${pos} (${JSON.stringify(card)}) : ${result?.error}.`);
+      if (!fallback) return;
+      card = fallback;
+      result = latest.playCard(pos, card);
+      if (!result?.success) return;
+    }
 
     const botName = p.name || 'IA';
 
@@ -786,7 +818,8 @@ io.on('connection', (socket) => {
       return;
     }
 
-    const result = addBotAtPosition(currentRoom, game, position, sanitizePlayerName(data.name, 'IA'));
+    const mode = sanitizeAiMode(data.mode);
+    const result = addBotAtPosition(currentRoom, game, position, sanitizePlayerName(data.name, ''), mode);
     if (!result.success) {
       socket.emit('error-msg', { message: result.error || 'Impossible d\'ajouter une IA.' });
     }
@@ -1040,7 +1073,8 @@ io.on('connection', (socket) => {
         emitSystemChatToSocket(socket.id, '/help - Affiche cette aide.');
         emitSystemChatToSocket(socket.id, '/host - Affiche le point cardinal de l\'hôte de la partie.');
         emitSystemChatToSocket(socket.id, '/kick Nord|Sud|Est|Ouest - Expulse un joueur de la position (créateur uniquement).');
-        emitSystemChatToSocket(socket.id, '/addia Nord|Sud|Est|Ouest - Ajoute une IA sur la position (créateur uniquement).');
+        emitSystemChatToSocket(socket.id, '/addia Nord|Sud|Est|Ouest [legacy|rule] - Ajoute une IA sur la position (créateur uniquement).');
+        emitSystemChatToSocket(socket.id, '/debug rule - Vérifie les fichiers de règles de l\'IA (règles valides / invalides).');
         emitSystemChatToSocket(socket.id, '/texture [nomPack] - Change votre pack de textures cartes (ou affiche la liste).');
       };
 
@@ -1125,11 +1159,11 @@ io.on('connection', (socket) => {
 
         const targetPos = parsePositionFromCommandArg(arg);
         if (!targetPos) {
-          emitSystemChatToSocket(socket.id, 'Usage: /addia Nord|Sud|Est|Ouest');
+          emitSystemChatToSocket(socket.id, 'Usage: /addia Nord|Sud|Est|Ouest [legacy|rule]');
           return;
         }
-
-        const result = addBotAtPosition(currentRoom, game, targetPos, 'IA');
+        const modeArg = arg.split(/\s+/).filter(Boolean)[1] || 'legacy';
+        const result = addBotAtPosition(currentRoom, game, targetPos, '', sanitizeAiMode(modeArg));
         if (!result.success) {
           emitSystemChatToSocket(socket.id, result.error || 'Impossible d\'ajouter une IA à cette position.');
           return;
@@ -1138,6 +1172,23 @@ io.on('connection', (socket) => {
         emitSystemChatToSocket(socket.id, `IA ajoutée sur ${positionLabelFr(targetPos)}.`);
         // Si c'est le tour de cette position en cours de partie, l'IA joue immédiatement.
         maybeProcessBotTurn(currentRoom);
+        return;
+      }
+
+      if (command === 'debug') {
+        const sub = (arg.split(/\s+/)[0] || '').toLowerCase();
+        if (sub !== 'rule' && sub !== 'rules') {
+          emitSystemChatToSocket(socket.id, 'Usage: /debug rule');
+          return;
+        }
+        // Relit les fichiers depuis le disque (prend en compte un git pull sans redémarrage).
+        const report = ruleEngine.buildReport({ reload: true });
+        const lines = ruleEngine.formatReportLines(report, { maxLines: 25 });
+        for (const line of lines) emitSystemChatToSocket(socket.id, line);
+        if (report.invalid.length || report.fileErrors.length) {
+          console.log('[debug rule]\n' + ruleEngine.formatReportLines(report, { maxLines: 10000 }).join('\n'));
+        }
+        touchRoom(currentRoom);
         return;
       }
 
