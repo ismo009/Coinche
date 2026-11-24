@@ -379,8 +379,47 @@ function addBotAtPosition(roomId, game, position, botName = '', aiMode = 'legacy
 const DEFAULT_TEAM_NAMES = { ns: 'Nord-Sud', eo: 'Est-Ouest' };
 
 function getTeamDisplayName(game, team) {
-  // [feature:teams] utiliser ici les noms d'équipe personnalisés.
-  return DEFAULT_TEAM_NAMES[team] || team;
+  // [feature:teams] noms d'équipe personnalisés (défaut si aucun).
+  const custom = game?.teamNames?.[team];
+  return custom || DEFAULT_TEAM_NAMES[team] || team;
+}
+
+const TEAM_NAME_MAX_LENGTH = 24;
+const TEAM_NAME_COOLDOWN_MS = 2000;
+
+// Renomme l'équipe du joueur assis à `position`. Chaîne vide = nom par défaut.
+// `state.lastAt` porte l'anti-spam (un changement toutes les 2 s par socket).
+// Retourne { success, error?, name? }.
+function applyTeamRename(roomId, game, position, rawName, state) {
+  const player = game?.players?.[position];
+  if (!player || isBotPlayer(player)) {
+    return { success: false, error: 'Seul un joueur assis peut renommer son équipe.' };
+  }
+  const now = Date.now();
+  if (now - (state.lastAt || 0) < TEAM_NAME_COOLDOWN_MS) {
+    return { success: false, error: 'Doucement ! Attends un peu avant de renommer à nouveau ton équipe.' };
+  }
+
+  const team = getTeam(position);
+  const name = sanitizeText(rawName, TEAM_NAME_MAX_LENGTH);
+  const previous = game.teamNames?.[team] || null;
+  if ((name || null) === previous) {
+    return { success: true, name: getTeamDisplayName(game, team), unchanged: true };
+  }
+
+  const oldLabel = getTeamDisplayName(game, team);
+  game.setTeamName(team, name || null);
+  state.lastAt = now;
+  const newLabel = getTeamDisplayName(game, team);
+
+  if (name) {
+    broadcastMessage(roomId, `L'équipe ${oldLabel} s'appelle désormais « ${newLabel} »`, 'info');
+  } else {
+    broadcastMessage(roomId, `L'équipe « ${oldLabel} » reprend son nom par défaut : ${newLabel}`, 'info');
+  }
+  broadcastGameState(roomId);
+  touchRoom(roomId);
+  return { success: true, name: newLabel };
 }
 
 // ============================================================
@@ -1043,6 +1082,19 @@ io.on('connection', (socket) => {
   });
 
   // [feature:teams] gestionnaires socket des noms d'équipe
+  const teamRenameState = { lastAt: 0 };
+  on('set-team-name', (data) => {
+    if (!currentRoom) return;
+    const game = games.get(currentRoom);
+    if (!game) return;
+    const position = game.getPlayerPosition(socket.id);
+    if (!position) return;
+
+    const result = applyTeamRename(currentRoom, game, position, data.name, teamRenameState);
+    if (!result.success) {
+      socket.emit('error-msg', { message: result.error });
+    }
+  });
 
   // [feature:stats] gestionnaires socket des statistiques
 
@@ -1089,6 +1141,7 @@ io.on('connection', (socket) => {
         emitSystemChatToSocket(socket.id, '/addia Nord|Sud|Est|Ouest [legacy|rule] - Ajoute une IA sur la position (créateur uniquement).');
         emitSystemChatToSocket(socket.id, '/debug rule - Vérifie les fichiers de règles de l\'IA (règles valides / invalides).');
         emitSystemChatToSocket(socket.id, '/texture [nomPack] - Change votre pack de textures cartes (ou affiche la liste).');
+        emitSystemChatToSocket(socket.id, '/team [nom] - Renomme votre équipe (sans nom : nom par défaut).');
       };
 
       if (!command) {
@@ -1235,6 +1288,19 @@ io.on('connection', (socket) => {
         emitTexturePackToSocket(socket.id, requester);
         emitSystemChatToSocket(socket.id, `Pack de textures actif : ${nextPack}`);
         touchRoom(currentRoom);
+        return;
+      }
+
+      if (command === 'team') {
+        // Le texte du chat est déjà tronqué à 180 caractères : on repart du texte brut
+        // pour que sanitizeText retire aussi les caractères de contrôle.
+        const rawArg = rawText.replace(/^\s*\/\S*\s?/, '');
+        const result = applyTeamRename(currentRoom, game, position, rawArg, teamRenameState);
+        if (!result.success) {
+          emitSystemChatToSocket(socket.id, result.error);
+        } else if (result.unchanged) {
+          emitSystemChatToSocket(socket.id, `Ton équipe s'appelle déjà « ${result.name} ».`);
+        }
         return;
       }
 

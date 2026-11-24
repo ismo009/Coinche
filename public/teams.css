@@ -1,0 +1,373 @@
+/* ============================================================
+   Cari'Coinche — noms d'équipe (public/teams.js)
+   Thème arcade : aplats, ombres dures, police pixel.
+   Pas de backdrop-filter ; animations transform / opacity uniquement.
+   ============================================================ */
+
+/* ---------- Salle d'attente ---------- */
+.team-info.teams-info {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  max-width: 100%;
+  margin: 0 auto;
+  padding: 6px;
+  border-radius: var(--radius-md);
+}
+
+.teams-chip {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 0;
+  max-width: min(240px, 100%);
+  padding: 4px 12px 5px;
+  border-radius: 8px;
+  background: var(--panel-2);
+  border: 2px solid var(--panel-edge);
+  box-shadow: var(--hard-sm);
+  line-height: 1.05;
+}
+
+.teams-chip.team-ns {
+  border-color: var(--team-ns-dark);
+}
+
+.teams-chip.team-eo {
+  border-color: var(--team-eo-dark);
+}
+
+.teams-chip.is-mine {
+  border-color: var(--gold);
+  box-shadow: 0 2px 0 var(--gold-dark);
+}
+
+.teams-chip-name {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-family: var(--font-pixel);
+  font-size: 22px;
+}
+
+.teams-chip-seats {
+  font-family: var(--font-body);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-dim);
+  letter-spacing: 0.3px;
+}
+
+.teams-vs {
+  font-family: var(--font-pixel);
+  font-size: 18px;
+  color: var(--text-dim);
+}
+
+.teams-rename-form {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 5px;
+  min-width: 0;
+}
+
+.teams-rename-waiting {
+  width: min(380px, 100%);
+  margin: 12px auto 0;
+}
+
+.teams-rename-label {
+  font-family: var(--font-pixel);
+  font-size: 17px;
+  color: var(--text-muted);
+}
+
+.teams-rename-row {
+  display: flex;
+  gap: 8px;
+  min-width: 0;
+}
+
+.teams-rename-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 9px 11px;
+  border-radius: var(--radius-sm);
+  border: 2px solid var(--panel-edge);
+  background: var(--bg-0);
+  color: var(--text);
+  font-size: 15px;
+  font-weight: 600;
+  box-shadow: inset 0 3px 0 rgba(0, 0, 0, 0.3);
+}
+
+.teams-rename-input::placeholder {
+  color: var(--text-dim);
+}
+
+.teams-rename-input:focus {
+  outline: none;
+  border-color: var(--gold);
+}
+
+.teams-rename-btn {
+  flex: 0 0 auto;
+  --btn-bg: var(--gold);
+  --btn-edge: var(--gold-dark);
+  color: var(--bg-0);
+  text-shadow: none;
+}
+
+/* ---------- Scoreboard ---------- */
+#scoreboard .team-label {
+  display: inline-block;
+  max-width: 150px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  vertical-align: middle;
+}
+
+#scoreboard .team-label .teams-full,
+#round-points .teams-full {
+  display: inline;
+}
+
+#scoreboard .team-label .teams-short,
+#round-points .teams-short {
+  display: none;
+}
+
+#scoreboard .team-label.is-mine {
+  cursor: pointer;
+  transition: transform 0.08s ease;
+}
+
+#scoreboard .team-label.is-mine:hover {
+  transform: translateY(-1px);
+}
+
+#scoreboard .team-label.is-mine:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
+}
+
+/* ---------- Points de la manche ---------- */
+#round-points > span {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 2px;
+  max-width: 190px;
+  min-width: 0;
+}
+
+.teams-rp-label {
+  display: inline-block;
+  min-width: 0;
+  max-width: 140px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.teams-rp-label::after {
+  content: ':';
+}
+
+/* ---------- Noms en ligne / tableaux (fin de manche, historique) ---------- */
+.teams-inline {
+  display: inline-block;
+  max-width: 11em;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  vertical-align: bottom;
+}
+
+.teams-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) repeat(var(--teams-cols, 2), auto);
+  align-items: baseline;
+  column-gap: 12px;
+  row-gap: 2px;
+  text-align: left;
+}
+
+.teams-grid .teams-inline {
+  display: block;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.teams-grid-head {
+  font-size: 0.85em;
+  color: var(--text-dim);
+  text-align: right;
+}
+
+.teams-grid-value {
+  text-align: right;
+}
+
+#result-details {
+  line-height: 1.5;
+}
+
+#result-details .teams-result-grid {
+  margin: 2px auto;
+  max-width: 340px;
+  font-size: 15px;
+}
+
+#result-details .teams-result-grid .teams-inline {
+  font-family: var(--font-pixel);
+  font-size: 22px;
+}
+
+#result-details .teams-winner-line {
+  margin-bottom: 6px;
+}
+
+#result-details .teams-winner .teams-inline {
+  max-width: 14em;
+  font-size: inherit;
+}
+
+#result-details .teams-goal {
+  margin-top: 6px;
+}
+
+.teams-history-grid {
+  margin-top: 2px;
+  column-gap: 6px;
+  row-gap: 0;
+}
+
+.teams-history-grid .teams-inline {
+  font-weight: 700;
+}
+
+.teams-history-grid .teams-grid-head {
+  font-size: 10px;
+}
+
+/* ---------- Popover de renommage en jeu ---------- */
+.teams-pop {
+  position: fixed;
+  top: 70px;
+  left: 50%;
+  z-index: 40;
+  width: min(320px, calc(100vw - 16px));
+  padding: 12px 12px 10px;
+  background: var(--panel);
+  border: 3px solid var(--panel-edge);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--hard);
+  transform: translateX(-50%);
+  animation: teams-pop-in 0.18s var(--ease-pop);
+}
+
+.teams-pop.hidden {
+  display: none;
+}
+
+@keyframes teams-pop-in {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(-6px) scale(0.96);
+  }
+}
+
+.teams-pop .teams-rename-label {
+  padding-right: 28px;
+  text-align: left;
+}
+
+.teams-pop-close {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: 6px;
+  background: var(--bg-0);
+  color: var(--text-muted);
+  font-family: var(--font-pixel);
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.teams-pop-close:hover {
+  color: var(--text);
+}
+
+.teams-pop-hint {
+  margin-top: 6px;
+  font-size: 11px;
+  color: var(--text-dim);
+  text-align: left;
+}
+
+@keyframes teams-pop-in-phone {
+  from {
+    opacity: 0;
+    transform: translateY(-6px) scale(0.96);
+  }
+}
+
+/* ---------- Téléphone : scoreboard compact -> « NS / EO » ---------- */
+@media (max-width: 600px), (max-height: 500px) and (orientation: landscape) {
+  #scoreboard .team-label .teams-full,
+  #round-points .teams-full {
+    display: none;
+  }
+
+  #scoreboard .team-label .teams-short,
+  #round-points .teams-short {
+    display: inline;
+  }
+
+  #scoreboard .team-label {
+    max-width: none;
+  }
+
+  .teams-pop {
+    top: calc(var(--safe-top) + var(--hud-h) + 8px);
+    left: 8px;
+    transform: none;
+    animation-name: teams-pop-in-phone;
+  }
+}
+
+@media (max-width: 480px) {
+  .team-info.teams-info {
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .teams-chip {
+    max-width: 100%;
+    padding: 3px 10px 4px;
+  }
+
+  .teams-chip-name {
+    font-size: 20px;
+  }
+
+  .teams-rename-waiting {
+    margin-top: 10px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .teams-pop {
+    animation: none;
+  }
+}
