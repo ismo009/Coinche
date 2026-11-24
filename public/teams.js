@@ -291,10 +291,18 @@
         { label: 'Score final', values: scores }
       ]), goal);
     } else {
-      details.append(buildScoreGrid(state, 'teams-result-grid', [
-        { label: 'Manche', values: state.roundPoints || { ns: 0, eo: 0 } },
-        { label: 'Total', values: scores }
-      ]));
+      // « Points faits » = points de cartes ramassés ; « Marqués » = ce qui est réellement
+      // ajouté au score (contrat, capot, coinche, belote, chute...).
+      const last = Array.isArray(state.roundHistory) ? state.roundHistory[0] : null;
+      if (last && last.capot) {
+        const line = make('div', 'teams-capot-line');
+        line.append('CAPOT ! ', inlineName(state, last.capot), ' remporte tous les plis');
+        details.append(line);
+      }
+      const columns = [{ label: 'Points faits', values: state.roundPoints || { ns: 0, eo: 0 } }];
+      if (last) columns.push({ label: 'Marqués', values: { ns: last.scoreNS, eo: last.scoreEO } });
+      columns.push({ label: 'Total', values: scores });
+      details.append(buildScoreGrid(state, 'teams-result-grid', columns));
     }
   }
 

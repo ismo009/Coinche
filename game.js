@@ -765,6 +765,12 @@ class CoincheGame {
     const contractBonus = this.contract.points * multiplier;
     const isSpecialBid = this.contract.points === 250 || this.contract.points === 270 || this.contract.points === 500;
     const capotWithoutSpecialBid = !isSpecialBid && this.tricksTaken[defenseTeam].length === 0;
+    // Équipe qui a remporté les 8 plis (capot), annoncé ou non.
+    const capotTeam = this.tricksTaken[defenseTeam].length === 0
+      ? contractTeam
+      : (this.tricksTaken[contractTeam].length === 0 ? defenseTeam : null);
+    // Valeur d'un capot non annoncé (162 points de cartes + bonus), belote en plus.
+    const CAPOT_POINTS = 252;
 
     if (contractMet) {
       // Le contrat est réussi
@@ -773,8 +779,8 @@ class CoincheGame {
           // Annonces spéciales: annonce + points faits
           scoreNS = contractPoints + contractBonus;
         } else if (capotWithoutSpecialBid) {
-          // Capot non annoncé: 252 + points de l'annonce
-          scoreNS = 252 + contractBonus;
+          // Capot non annoncé : 252 + belote éventuelle + points de l'annonce
+          scoreNS = CAPOT_POINTS + belotePoints.ns + contractBonus;
         } else {
           scoreNS = contractPoints + contractBonus;
         }
@@ -784,16 +790,17 @@ class CoincheGame {
           // Annonces spéciales: annonce + points faits
           scoreEO = contractPoints + contractBonus;
         } else if (capotWithoutSpecialBid) {
-          // Capot non annoncé: 252 + points de l'annonce
-          scoreEO = 252 + contractBonus;
+          // Capot non annoncé : 252 + belote éventuelle + points de l'annonce
+          scoreEO = CAPOT_POINTS + belotePoints.eo + contractBonus;
         } else {
           scoreEO = contractPoints + contractBonus;
         }
         scoreNS = defensePoints;
       }
     } else {
-      // Le contrat est chuté: l'attaque ne marque rien
-      const totalPoints = 162;
+      // Le contrat est chuté: l'attaque ne marque rien.
+      // Si la défense a fait tous les plis (capot), elle marque la valeur du capot.
+      const totalPoints = capotTeam === defenseTeam ? CAPOT_POINTS : 162;
       const defenseBelotePoints = belotePoints[defenseTeam];
       if (contractTeam === 'ns') {
         scoreEO = totalPoints + defenseBelotePoints + contractBonus;
@@ -822,7 +829,8 @@ class CoincheGame {
       scoreEO,
       totalScores: { ...this.scores },
       belote: { ...this.beloteAnnounced },
-      multiplier
+      multiplier,
+      capot: capotTeam
     };
 
     this.roundNumber++;
@@ -837,6 +845,7 @@ class CoincheGame {
       defensePoints,
       scoreNS,
       scoreEO,
+      capot: capotTeam,
       totalScores: { ...this.scores }
     });
 

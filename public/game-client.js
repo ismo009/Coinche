@@ -1241,7 +1241,9 @@ function playStateTransitionEffects(prev, next) {
   // Fin de manche -> bannière réussite / chute, puis écran de résultat.
   if (prev.state === 'playing' && (next.state === 'scoring' || next.state === 'finished')) {
     const last = Array.isArray(next.roundHistory) ? next.roundHistory[0] : null;
-    if (last) {
+    if (last && last.capot) {
+      showCenterBanner('CAPOT !', 'special', last.contractMet ? 'Contrat réussi' : 'Contrat chuté');
+    } else if (last) {
       showCenterBanner(last.contractMet ? 'Contrat réussi !' : 'Contrat chuté !', last.contractMet ? 'success' : 'fail');
     }
     if (!prefersReducedMotion()) {
@@ -2698,7 +2700,8 @@ function showRoundResult(state) {
     title.className = '';
     details.innerHTML = `
       Score: NS <strong>${state.scores.ns}</strong> - EO <strong>${state.scores.eo}</strong><br>
-      Points manche: NS <strong>${state.roundPoints.ns}</strong> - EO <strong>${state.roundPoints.eo}</strong>
+      Points faits: NS <strong>${state.roundPoints.ns}</strong> - EO <strong>${state.roundPoints.eo}</strong><br>
+      Points marqués: NS <strong>${state.roundHistory?.[0]?.scoreNS ?? 0}</strong> - EO <strong>${state.roundHistory?.[0]?.scoreEO ?? 0}</strong>
     `;
     btnNext.classList.remove('hidden');
     btnNew.classList.add('hidden');

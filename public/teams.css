@@ -371,3 +371,22 @@
     animation: none;
   }
 }
+
+/* Ligne "CAPOT !" du panneau de fin de manche */
+.teams-capot-line {
+  margin-bottom: 8px;
+  padding: 4px 10px;
+  border-radius: 8px;
+  background: var(--purple, #8f6bff);
+  border: 2px solid var(--purple-dark, #5a3cc4);
+  color: #fff;
+  font-family: var(--font-pixel);
+  font-size: 18px;
+  line-height: 1.2;
+  text-align: center;
+}
+
+.teams-capot-line .teams-inline,
+.teams-capot-line .teams-inline * {
+  color: var(--gold, #ffc94a) !important;
+}
