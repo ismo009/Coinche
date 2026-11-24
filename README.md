@@ -100,6 +100,38 @@ Serveur disponible sur `http://localhost:3000`.
 | 8 | 0 |
 | 7 | 0 |
 
+## Noms d'equipe
+
+Chaque equipe (Nord-Sud et Est-Ouest) peut se donner un nom : dans la salle d'attente, champ « Nom de ton equipe » puis
+« Nommer » ; en cours de partie, clic sur le nom de son equipe dans le tableau des scores, ou `/team <nom>` dans le chat
+(`/team` seul remet le nom par defaut). N'importe quel membre de l'equipe peut la renommer, a tout moment
+(24 caracteres max, un changement toutes les 2 secondes). Le nom est conserve pendant toute la vie de la salle et
+apparait dans le tableau des scores, les points de la manche, la fin de manche, l'historique et les messages.
+Sur telephone, le tableau des scores garde l'affichage compact « NS / EO ».
+
+## Statistiques des joueurs
+
+L'onglet « Statistiques » de l'accueil (ou l'adresse `/#stats`) affiche le classement : parties jouees, victoires,
+defaites, % de victoires, contrats reussis, contrats rates et % de contrats reussis. Tri par clic sur les en-tetes,
+recherche par pseudo, pseudo courant mis en evidence. Un contrat est compte au preneur a chaque fin de manche, une
+partie a chaque joueur humain assis lorsqu'elle se termine ; les IA et le pseudo par defaut « Joueur » ne sont pas comptes.
+
+Les statistiques sont liees au **pseudo** (sans compte ni mot de passe : n'importe qui peut jouer sous un pseudo
+existant) et enregistrees cote serveur dans `data/stats.json` (chemin modifiable avec la variable d'environnement
+`STATS_FILE`, dossier ignore par git). API JSON : `GET /api/stats` (`?q=` pour chercher un pseudo).
+
+## Emotes
+
+Pendant une partie ou dans la salle d'attente, le bouton **Emotes** (en haut a droite sur telephone, en bas a gauche
+sur ordinateur) ouvre le choix des images : l'emote apparait quelques secondes au-dessus de ton siege pour tous les
+joueurs de la table (une emote toutes les 1,5 s au maximum ; Echap ou un clic ailleurs ferme le panneau).
+
+**Ajouter une emote** : deposer un fichier PNG **256x256 avec fond transparent** (RGBA, ou palette avec transparence),
+de moins de 300 Ko, dans `public/emotes/`. Le nom du fichier devient son identifiant : minuscules, chiffres, `-` et `_`
+uniquement (ex. `belote.png`). Le libelle et l'ordre d'affichage se reglent dans `public/emotes/emotes.json`
+(`{ "belote": "Belote !" }`). Verifier avec `npm run check-emotes`, puis committer : le serveur la prend en compte sans
+redemarrage. Les emotes d'origine se regenerent avec `python3 tools/generate-emotes.py` (Pillow).
+
 ## IA : deux modes
 
 - **Legacy** (`ai/coinche-bot.js`) : l'IA historique.
@@ -144,7 +176,8 @@ Convention utilisee par l'IA (et reconnue quand un humain la pratique) :
 ## Scripts
 
 - `npm start`: lance `node server.js`.
-- `npm test`: lance les tests de non-regression (regles, generale, appels de l'IA, parties completes).
+- `npm test`: lance tous les tests (regles, IA, serveur, noms d'equipe, statistiques, emotes).
+- `npm run check-emotes`: verifie les emotes de `public/emotes/`.
 
 ## Personnalisation rapide
 

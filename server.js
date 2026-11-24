@@ -45,6 +45,21 @@ app.get('/api/emotes', (req, res) => {
   res.json({ emotes: emoteRegistry.list() });
 });
 
+// [feature:stats] Statistiques des joueurs (fichier JSON, voir lib/stats-store.js)
+const { createStatsStore, recordRoundOutcome } = require('./lib/stats-store');
+const statsStore = createStatsStore().load();
+statsStore.installExitHandlers();
+const STATS_API_LIMIT = 500;
+
+app.get('/api/stats', (req, res) => {
+  const q = typeof req.query.q === 'string' ? req.query.q.slice(0, 40) : '';
+  res.set('Cache-Control', 'no-store');
+  res.json({
+    players: statsStore.list({ sort: 'wins', limit: STATS_API_LIMIT, q }),
+    updatedAt: statsStore.updatedAt
+  });
+});
+
 // Stockage des parties en cours
 const games = new Map();
 const PUBLIC_ROOM_PREFIX = 'PUB-';
@@ -439,6 +454,7 @@ function applyTeamRename(roomId, game, position, rawName, state) {
 function onRoundFinished(roomId, game, result) {
   // result.action : 'round_end' | 'game_over' ; result.roundResult ; result.winner ('ns'|'eo') si game_over.
   // [feature:stats] enregistrer ici les statistiques des joueurs.
+  recordRoundOutcome(statsStore, game, result);
 }
 
 // Messages consécutifs à une carte jouée (humain ou IA).

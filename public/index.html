@@ -17,6 +17,7 @@
   <link rel="stylesheet" href="/teams.css">
 
   <!-- [feature:stats] css -->
+  <link rel="stylesheet" href="/stats.css">
 
   <!-- [feature:emotes] css -->
   <link rel="stylesheet" href="/emotes.css">
@@ -30,6 +31,13 @@
         decoding="async">
       <h1 class="lobby-title"><span class="suit-glyph black">♠</span> Cari'Coinche <span class="suit-glyph red">♥</span></h1>
       <p class="subtitle">Coinche en ligne par l'INSA pour l'INSA</p>
+
+      <!-- [feature:stats] onglets de l'accueil -->
+      <div class="lobby-tabs" role="tablist" aria-label="Accueil">
+        <button type="button" class="lobby-tab is-active" id="lobby-tab-play" role="tab" aria-selected="true">Jouer</button>
+        <button type="button" class="lobby-tab" id="lobby-tab-stats" role="tab" aria-selected="false"
+          aria-controls="stats-panel" tabindex="-1">Statistiques</button>
+      </div>
 
       <div class="lobby-form">
         <div class="lobby-name-row">
@@ -91,6 +99,34 @@
           </div>
         </div>
       </div>
+
+      <!-- [feature:stats] onglet Statistiques -->
+      <section id="stats-panel" class="stats-panel hidden" role="tabpanel" aria-labelledby="lobby-tab-stats">
+        <div class="stats-toolbar">
+          <input type="search" id="stats-search" class="stats-search" placeholder="Rechercher un pseudo" maxlength="20"
+            autocomplete="off" spellcheck="false" aria-label="Rechercher un pseudo">
+          <button id="btn-stats-refresh" class="btn btn-secondary btn-sm" type="button">Rafraîchir</button>
+        </div>
+        <p id="stats-status" class="stats-status" role="status" aria-live="polite"></p>
+        <div class="stats-table-wrap" id="stats-table-wrap" tabindex="0" aria-label="Classement des joueurs">
+          <table class="stats-table">
+            <thead>
+              <tr>
+                <th scope="col" class="stats-col-name" data-sort="name"><button type="button">Joueur</button></th>
+                <th scope="col" data-sort="gamesPlayed"><button type="button">Parties</button></th>
+                <th scope="col" data-sort="gamesWon"><button type="button">Victoires</button></th>
+                <th scope="col" data-sort="gamesLost"><button type="button">Défaites</button></th>
+                <th scope="col" data-sort="winRate"><button type="button">% Vict.</button></th>
+                <th scope="col" data-sort="contractsMade"><button type="button">Contrats réussis</button></th>
+                <th scope="col" data-sort="contractsFailed"><button type="button">Contrats ratés</button></th>
+                <th scope="col" data-sort="contractRate"><button type="button">% Contrats</button></th>
+              </tr>
+            </thead>
+            <tbody id="stats-tbody"></tbody>
+          </table>
+        </div>
+        <p class="stats-footnote">Seules les parties terminées comptent. Les IA et le pseudo par défaut « Joueur » sont ignorés.</p>
+      </section>
 
       <div id="lobby-error" class="error-msg hidden"></div>
       <p class="lobby-made-by">Fait par vos membres du City Bar préféré, Zac et Isma 🧡 4A ICy</p>
@@ -335,6 +371,7 @@
   <script src="/teams.js"></script>
 
   <!-- [feature:stats] script -->
+  <script src="/stats.js"></script>
 
   <!-- [feature:emotes] script -->
   <script src="/emotes.js"></script>

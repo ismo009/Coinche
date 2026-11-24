@@ -142,7 +142,7 @@ const teamIs = (team, name) => (st) => st && st.teamNames && st.teamNames[team] 
 
 async function serverTests() {
   const server = spawn(process.execPath, [path.join(__dirname, '..', 'server.js')], {
-    env: { ...process.env, PORT: String(PORT) },
+    env: { ...process.env, PORT: String(PORT), STATS_FILE: require('path').join(require('os').tmpdir(), `coinche-test-stats-${process.pid}-${Date.now()}.json`) },
     stdio: ['ignore', 'pipe', 'pipe']
   });
   let exited = null;

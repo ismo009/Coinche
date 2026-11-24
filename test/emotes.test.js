@@ -228,7 +228,7 @@ async function testServer() {
   const port = 4000 + Math.floor(Math.random() * 900);
   const url = `http://localhost:${port}`;
   const server = spawn(process.execPath, [path.join(ROOT, 'server.js')], {
-    env: { ...process.env, PORT: String(port) },
+    env: { ...process.env, PORT: String(port), STATS_FILE: require('path').join(require('os').tmpdir(), `coinche-test-stats-${process.pid}-${Date.now()}.json`) },
     stdio: ['ignore', 'ignore', 'pipe']
   });
   let exited = null;

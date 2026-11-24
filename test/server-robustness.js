@@ -40,7 +40,7 @@ function once(socket, event, timeoutMs = 3000) {
 
 async function main() {
   const server = spawn(process.execPath, [path.join(__dirname, '..', 'server.js')], {
-    env: { ...process.env, PORT: String(PORT) },
+    env: { ...process.env, PORT: String(PORT), STATS_FILE: require('path').join(require('os').tmpdir(), `coinche-test-stats-${process.pid}-${Date.now()}.json`) },
     stdio: ['ignore', 'pipe', 'pipe']
   });
   let exited = null;
