@@ -1,8 +1,9 @@
 {
   "version": 1,
-  "description": "Règles d'annonce de l'IA 'règles'. Préremplies pour reproduire l'IA legacy (ai/coinche-bot.js). Documentation : RULE.md.",
+  "description": "Règles d'annonce de l'IA 'règles', avec un seuil réglable pour les ouvertures risquées au minimum. Documentation : RULE.md.",
   "params": {
     "openMin": 80,
+    "riskyOpenMinEstimate": 15,
     "overcallStep": 10,
     "overcallSafeLevel": 100,
     "raiseCap": 20,

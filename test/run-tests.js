@@ -312,6 +312,26 @@ test('les fichiers de règles livrés sont tous valides', () => {
   assert.ok(report.total >= 30);
 });
 
+test('IA règles : ouvre à 80 avec une main risquée mais significative', () => {
+  const g = newGame();
+  g.startNewRound();
+  const hand = [
+    C('7', 'coeur'), C('8', 'coeur'), C('9', 'coeur'), C('dame', 'coeur'),
+    C('as', 'carreau'), C('7', 'carreau'), C('8', 'trefle'), C('7', 'pique')
+  ];
+  g.hands[g.currentPlayer] = hand;
+  assert.strictEqual(bot.helpers.evaluateSuitBid(hand, 'coeur'), 0);
+  assert.deepStrictEqual(ruleBot.chooseBid(g), { type: 'bid', points: 80, suit: 'coeur' });
+
+  const weak = newGame();
+  weak.startNewRound();
+  weak.hands[weak.currentPlayer] = [
+    C('7', 'coeur'), C('8', 'coeur'), C('7', 'carreau'), C('8', 'carreau'),
+    C('7', 'trefle'), C('8', 'trefle'), C('7', 'pique'), C('8', 'pique')
+  ];
+  assert.deepStrictEqual(ruleBot.chooseBid(weak), { type: 'pass' });
+});
+
 test('/debug rule : règles invalides détectées et listées par id', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'coinche-rules-'));
   const annonce = {

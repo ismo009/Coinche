@@ -7,7 +7,7 @@ Cari'Coinche propose deux IA :
 | **Legacy** | `ai/coinche-bot.js` | L'IA historique, codée en JavaScript. Inchangée. |
 | **Règles** | `ai/rules/rule_annonce.json` + `ai/rules/rule_jeux.json` | L'IA pilotée par des règles écrites en JSON, modifiables par simple commit GitHub. |
 
-Les fichiers de règles livrés reproduisent (environ) le comportement de l'IA legacy. Ils sont faits pour être affinés à la main.
+Les annonces du mode « règles » peuvent ouvrir à 80 avec une main risquée mais suffisamment prometteuse pour appeler le partenaire. Elles n'ajoutent pas de points à l'estimation des contrats ; l'IA legacy reste inchangée.
 
 Sommaire :
 
@@ -57,7 +57,7 @@ Conseils :
 {
   "version": 1,
   "description": "Texte libre",
-  "params": { "openMin": 80, "coincheEnemyStrength": 0.32 },
+  "params": { "openMin": 80, "riskyOpenMinEstimate": 15, "coincheEnemyStrength": 0.32 },
   "vars": [
     { "name": "best", "expr": "bestValue()" }
   ],
@@ -79,6 +79,8 @@ Conseils :
 | `final.tieBreak` | jeux | non | Départage des cartes à égalité de score : `lowest` (défaut, la carte la moins chère), `highest`, ou `evNet` (meilleure espérance). |
 
 Une variable invalide est signalée par `/debug rule` ; les règles qui l'utilisent deviennent alors invalides (« identifiant inconnu »).
+
+Dans `rule_annonce.json`, `riskyOpenMinEstimate` fixe l'évaluation brute minimale d'une couleur pour qu'une main trop faible pour l'ouverture habituelle puisse tenter une annonce à 80. Cette prise de risque ne modifie pas l'estimation ni ne gonfle le niveau annoncé ; elle s'applique uniquement à l'ouverture sans enchère préalable. La valeur `0` désactive cette ouverture risquée.
 
 ## 4. Structure d'une règle
 

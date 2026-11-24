@@ -14,6 +14,8 @@ const H = legacy.helpers;
 const POSITIONS = ['sud', 'ouest', 'nord', 'est'];
 const VALID_BID_POINTS = [80, 90, 100, 110, 120, 130, 140, 150, 160, 250, 270, 500];
 const CONTRACT_SUITS = [...SUITS, 'tout-atout', 'sans-atout'];
+const SUIT_TRUMP_POINTS = { valet: 20, '9': 14, as: 11, '10': 10, roi: 4, dame: 3 };
+const SUIT_PLAIN_POINTS = { as: 12, '10': 10, roi: 4, dame: 3, valet: 1 };
 
 // Dernière décision (pour le débogage).
 const lastDecision = { annonce: null, jeux: null };
@@ -41,7 +43,7 @@ function normalizeBid(points) {
   return Math.min(160, Math.round(points / 10) * 10);
 }
 
-function buildAnnonceContext(game) {
+function buildAnnonceContext(game, riskyOpenMinEstimate = 0) {
   const me = game.currentPlayer;
   const myTeam = getTeam(me);
   const hand = game.hands?.[me] || [];
@@ -83,7 +85,30 @@ function buildAnnonceContext(game) {
   };
   const specialRisk = (suit) => (CONTRACT_SUITS.includes(suit) ? H.estimateSpecialAnnouncementRiskPenalty(hand, suit, game, me) : 0);
 
+  // Keep the legacy suit estimate before bid-step clamping for the risk threshold.
+  const rawSuitEstimate = (suit) => {
+    const trumpCards = hand.filter(c => c && c.suit === suit);
+    const nbTrump = trumpCards.length;
+    let points = 0;
+    for (const c of hand) {
+      if (!c) continue;
+      points += c.suit === suit
+        ? (SUIT_TRUMP_POINTS[c.rank] || 0)
+        : (SUIT_PLAIN_POINTS[c.rank] || 0);
+    }
+    if (H.hasBelote(hand, suit)) points += 20;
+    if (nbTrump >= 5) points += 15;
+    if (nbTrump >= 6) points += 20;
+    if (nbTrump <= 2) points -= 15;
+    if (trumpCards.some(c => c.rank === 'valet')) points += 10;
+    if (trumpCards.some(c => c.rank === '9')) points += 6;
+    if (trumpCards.some(c => c.rank === 'as')) points += 2;
+    if (trumpCards.some(c => c.rank === '10')) points += 1;
+    return points - specialRisk(suit);
+  };
+
   let best = null;
+  let riskyBest = null;
   const computeBest = () => {
     if (best) return best;
     const candidates = CONTRACT_SUITS.map(suit => {
@@ -94,6 +119,16 @@ function buildAnnonceContext(game) {
     best = candidates[0];
     return best;
   };
+  const computeRiskyBest = () => {
+    if (riskyBest) return riskyBest;
+    riskyBest = SUITS
+      .map(suit => ({ suit, raw: rawSuitEstimate(suit) }))
+      .sort((a, b) => b.raw - a.raw)[0];
+    return riskyBest;
+  };
+  const shouldRiskOpen = () => !contract
+    && riskyOpenMinEstimate > 0
+    && computeRiskyBest().raw >= riskyOpenMinEstimate;
 
   const values = {
     me: { position: me, team: myTeam },
@@ -129,8 +164,14 @@ function buildAnnonceContext(game) {
   const functions = {
     estimate,
     specialRisk,
-    bestSuit: () => computeBest().suit,
-    bestValue: () => computeBest().points,
+    bestSuit: () => {
+      const regular = computeBest();
+      return regular.points > 0 || !shouldRiskOpen() ? regular.suit : computeRiskyBest().suit;
+    },
+    bestValue: () => {
+      const regular = computeBest();
+      return regular.points > 0 ? regular.points : shouldRiskOpen() ? 80 : regular.points;
+    },
     countSuit: (suit) => hand.filter(c => c.suit === suit).length,
     countRank: (rank) => hand.filter(c => c.rank === rank).length,
     has: (rank, suit) => hand.some(c => c.rank === rank && c.suit === suit),
@@ -176,7 +217,7 @@ function chooseBid(game) {
   try {
     const set = engine.getRuleSet('annonce');
     if (set.ordered && set.ordered.length) {
-      const ctx = buildAnnonceContext(game);
+      const ctx = buildAnnonceContext(game, set.params.riskyOpenMinEstimate || 0);
       const decision = engine.runAnnonce(set, ctx);
       if (decision) {
         lastDecision.annonce = { player: game.currentPlayer, ruleId: decision.rule.id, action: decision.action };
