@@ -35,6 +35,16 @@ app.get('/lobby/:code', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
+// [feature:emotes] Emotes en image (public/emotes/*.png, validées par lib/emotes.js).
+const { createEmoteRegistry } = require('./lib/emotes');
+const emoteRegistry = createEmoteRegistry(path.join(__dirname, 'public', 'emotes'));
+const EMOTE_COOLDOWN_MS = 1500;
+emoteRegistry.list(); // premier scan au démarrage : avertit tout de suite des fichiers invalides
+app.get('/api/emotes', (req, res) => {
+  res.set('Cache-Control', 'no-cache');
+  res.json({ emotes: emoteRegistry.list() });
+});
+
 // Stockage des parties en cours
 const games = new Map();
 const PUBLIC_ROOM_PREFIX = 'PUB-';
@@ -1047,6 +1057,26 @@ io.on('connection', (socket) => {
   // [feature:stats] gestionnaires socket des statistiques
 
   // [feature:emotes] gestionnaires socket des emotes
+  // Une emote est diffusée à toute la salle avec la position de l'émetteur.
+  // Anti-spam : 1 emote / 1,5 s par socket, les envois en trop sont ignorés en silence.
+  let lastEmoteAt = 0;
+  on('emote', (data) => {
+    const game = currentRoom ? games.get(currentRoom) : null;
+    const position = game ? game.getPlayerPosition(socket.id) : null;
+    if (!position) {
+      socket.emit('error-msg', { message: 'Rejoins une table pour envoyer une emote.' });
+      return;
+    }
+    const id = typeof data.id === 'string' ? data.id : '';
+    if (!emoteRegistry.has(id)) {
+      socket.emit('error-msg', { message: 'Emote inconnue.' });
+      return;
+    }
+    const now = Date.now();
+    if (now - lastEmoteAt < EMOTE_COOLDOWN_MS) return;
+    lastEmoteAt = now;
+    io.to(currentRoom).emit('emote', { position, id });
+  });
 
   on('get-available-positions', (data) => {
     const roomId = sanitizeRoomCode(data.roomId);

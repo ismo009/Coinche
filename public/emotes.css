@@ -1,0 +1,219 @@
+/* ============================================================
+   Cari'Coinche — emotes en image (public/emotes.js)
+   Thème arcade : aplats, contour sombre, ombre dure.
+   Animations limitées à transform / opacity.
+   ============================================================ */
+
+/* ---- Bouton (table de jeu, desktop) : au-dessus des points de la manche ---- */
+#btn-emotes.hud-btn {
+  display: inline-flex;
+  position: fixed;
+  left: 14px;
+  bottom: 72px;
+  z-index: 18;
+}
+
+.emote-btn.is-cooling {
+  opacity: 0.6;
+}
+
+.emote-btn[aria-expanded="true"] {
+  --btn-bg: var(--gold);
+  --btn-edge: var(--gold-dark);
+  color: var(--bg-0);
+  text-shadow: none;
+}
+
+/* Salle d'attente */
+.emote-waiting-row {
+  display: flex;
+  justify-content: center;
+  margin: 12px 0 4px;
+}
+
+/* ---- Panneau de choix ---- */
+.emote-panel {
+  position: fixed;
+  z-index: 10005;
+  width: 316px;
+  max-width: calc(100vw - 16px);
+  max-height: calc(100vh - 16px);
+  max-height: calc(100dvh - 16px);
+  overflow-y: auto;
+  padding: 10px;
+  border-radius: var(--radius-lg);
+  background: var(--panel);
+  border: 3px solid var(--panel-edge);
+  box-shadow: var(--hard);
+  animation: emote-panel-in 0.16s var(--ease-out) both;
+}
+
+.emote-panel[hidden] {
+  display: none;
+}
+
+.emote-panel-title {
+  margin: 0 2px 8px;
+  font-family: var(--font-pixel);
+  font-size: 20px;
+  color: var(--gold);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  text-shadow: 0 2px 0 rgba(0, 0, 0, 0.35);
+}
+
+.emote-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.emote-grid.is-cooling .emote-item {
+  opacity: 0.55;
+}
+
+.emote-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+  padding: 6px 2px 4px;
+  border: 2px solid transparent;
+  border-radius: var(--radius-md);
+  background: var(--bg-0);
+  color: var(--text);
+  font-family: var(--font-pixel);
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+  touch-action: manipulation;
+  transition: transform 0.1s var(--ease-pop), border-color 0.1s ease;
+}
+
+.emote-item img {
+  display: block;
+  width: 56px;
+  height: 56px;
+  image-rendering: pixelated;
+  pointer-events: none;
+}
+
+.emote-item-label {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-muted);
+}
+
+.emote-item:hover,
+.emote-item:focus-visible {
+  border-color: var(--gold);
+  transform: translateY(-2px);
+  outline: none;
+}
+
+.emote-item:active {
+  transform: translateY(1px) scale(0.96);
+}
+
+.emote-empty {
+  grid-column: 1 / -1;
+  padding: 12px 4px;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 14px;
+}
+
+@keyframes emote-panel-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.96);
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* ---- Emote affichée au-dessus d'un siège ---- */
+.emote-bubble {
+  --emote-size: 120px;
+  position: fixed;
+  z-index: 9990;
+  width: var(--emote-size);
+  height: var(--emote-size);
+  pointer-events: none;
+  transition: opacity 0.28s ease, transform 0.28s var(--ease-out);
+}
+
+.emote-bubble img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  image-rendering: pixelated;
+  transform-origin: 50% 90%;
+  animation: emote-pop 0.42s var(--ease-pop) both;
+}
+
+.emote-bubble.is-leaving {
+  opacity: 0;
+  transform: translateY(-14px) scale(0.9);
+}
+
+@keyframes emote-pop {
+  0% {
+    opacity: 0;
+    transform: translateY(16px) scale(0.3);
+  }
+
+  55% {
+    opacity: 1;
+    transform: translateY(-4px) scale(1.12);
+  }
+
+  100% {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* ---- Téléphone : bouton dans la barre du haut, emotes plus petites ---- */
+@media (max-width: 600px), (max-height: 500px) and (orientation: landscape) {
+  #hud-actions #btn-emotes.hud-btn {
+    position: static;
+    left: auto;
+    bottom: auto;
+  }
+
+  .emote-bubble {
+    --emote-size: 96px;
+  }
+
+  .emote-panel {
+    width: 300px;
+  }
+
+  .emote-item img {
+    width: 52px;
+    height: 52px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .emote-panel,
+  .emote-bubble img {
+    animation: none;
+  }
+
+  .emote-bubble,
+  .emote-item {
+    transition: none;
+  }
+
+  .emote-bubble.is-leaving {
+    transform: none;
+  }
+}
