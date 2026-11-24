@@ -112,6 +112,48 @@ test('surcoinche hors tour par l\'équipe coinchée ; coinche impossible sans en
   assert.strictEqual(g.contract.surcoinched, true);
 });
 
+function scoreCapotScenario({ capotBy = 'attack', attackBelote = false, defenseBelote = false, points = 80, normal = false }) {
+  const g = newGame();
+  g.startNewRound();
+  g.contract = { team: 'ns', player: 'sud', points, suit: 'coeur', coinched: false, surcoinched: false };
+  const fake = [{ player: 'sud', card: C('7', 'pique') }];
+  g.tricksTaken = { ns: [], eo: [] };
+  if (normal) {
+    for (let i = 0; i < 5; i++) g.tricksTaken.ns.push(fake);
+    for (let i = 0; i < 3; i++) g.tricksTaken.eo.push(fake);
+    g.roundPoints = { ns: 100, eo: 62 };
+  } else {
+    const w = capotBy === 'attack' ? 'ns' : 'eo';
+    for (let i = 0; i < 8; i++) g.tricksTaken[w].push(fake);
+    g.roundPoints = { ns: 0, eo: 0 };
+    g.roundPoints[w] = 162;
+  }
+  if (attackBelote) g.beloteAnnounced.ns.coeur = 'rebelote';
+  if (defenseBelote) g.beloteAnnounced.eo.coeur = 'rebelote';
+  return g.endRound(null).roundResult;
+}
+
+test('capot de l\'attaque : 252 + contrat, belote de l\'attaque conservée (issue #63)', () => {
+  let r = scoreCapotScenario({});
+  assert.deepStrictEqual([r.scoreNS, r.scoreEO, r.capot, r.contractMet], [330, 0, 'ns', true]);
+  r = scoreCapotScenario({ defenseBelote: true });
+  assert.deepStrictEqual([r.scoreNS, r.scoreEO], [330, 20]); // belote adverse sans effet sur le capot
+  r = scoreCapotScenario({ attackBelote: true });
+  assert.deepStrictEqual([r.scoreNS, r.scoreEO], [350, 0]);
+});
+
+test('capot de la défense (attaque sans pli) : 252 + contrat (+ belote) pour la défense', () => {
+  let r = scoreCapotScenario({ capotBy: 'defense' });
+  assert.deepStrictEqual([r.scoreNS, r.scoreEO, r.capot, r.contractMet], [0, 330, 'eo', false]);
+  r = scoreCapotScenario({ capotBy: 'defense', defenseBelote: true });
+  assert.deepStrictEqual([r.scoreNS, r.scoreEO], [0, 350]);
+});
+
+test('manche sans capot : barème inchangé', () => {
+  const r = scoreCapotScenario({ normal: true });
+  assert.deepStrictEqual([r.scoreNS, r.scoreEO, r.capot], [180, 60, null]);
+});
+
 test('dealId est incrémenté à chaque distribution et exposé au client', () => {
   const g = newGame();
   g.startNewRound();
