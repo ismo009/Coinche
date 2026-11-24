@@ -2028,6 +2028,9 @@ function updateDisplay() {
 function updateWaitingRoom() {
   const posNames = { sud: 'Sud', nord: 'Nord', est: 'Est', ouest: 'Ouest' };
 
+  const leaveLobbyBtn = document.getElementById('btn-leave-lobby');
+  if (leaveLobbyBtn) leaveLobbyBtn.disabled = false;
+
   const addBotControls = document.getElementById('add-bot-controls');
   if (addBotControls) {
     const canAddBot = isRoomOwner && gameState?.state === 'waiting';
@@ -2042,15 +2045,33 @@ function updateWaitingRoom() {
     const nameEl = slot.querySelector('.slot-name');
     const isFree = !gameState.players[pos];
     const isMine = pos === me;
+    nameEl.replaceChildren();
 
     if (!isFree) {
       const player = gameState.players[pos];
       const suffix = isMine ? ' (moi)' : '';
       const aiTag = player.ai ? ` · IA ${player.ai === 'rule' ? 'Règles' : 'Legacy'}` : '';
       const showTag = player.ai && !/legacy|règles/i.test(player.name);
-      nameEl.textContent = `${player.name}${suffix}${showTag ? aiTag : ''}`;
+      const playerName = document.createElement('span');
+      playerName.textContent = `${player.name}${suffix}${showTag ? aiTag : ''}`;
+      nameEl.appendChild(playerName);
+
+      if (isRoomOwner && !isMine && gameState.state === 'waiting') {
+        const kickBtn = document.createElement('button');
+        kickBtn.className = 'btn btn-danger btn-sm player-kick-btn';
+        kickBtn.type = 'button';
+        kickBtn.textContent = 'Expulser';
+        kickBtn.setAttribute('aria-label', `Expulser ${player.name}`);
+        kickBtn.addEventListener('click', (event) => {
+          event.stopPropagation();
+          socket.emit('kick-player', { position: pos });
+        });
+        nameEl.appendChild(kickBtn);
+      }
     } else {
-      nameEl.textContent = canMove ? 'Libre, clique pour t\'y placer' : 'En attente...';
+      const emptyLabel = document.createElement('span');
+      emptyLabel.textContent = canMove ? 'Libre, clique pour t\'y placer' : 'En attente...';
+      nameEl.appendChild(emptyLabel);
     }
 
     slot.classList.toggle('occupied', !isFree);
@@ -2086,6 +2107,12 @@ for (const pos of ['sud', 'nord', 'est', 'ouest']) {
     }
   });
 }
+
+document.getElementById('btn-leave-lobby').addEventListener('click', (event) => {
+  event.currentTarget.disabled = true;
+  pendingRoomLeave = true;
+  socket.emit('leave-room');
+});
 
 socket.on('seat-changed', (data) => {
   if (!data || !data.position) return;

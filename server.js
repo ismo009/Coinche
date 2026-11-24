@@ -1077,6 +1077,58 @@ io.on('connection', (socket) => {
     socket.emit('room-left', { roomId, position });
   });
 
+  on('kick-player', (data) => {
+    if (!currentRoom) return;
+    const game = games.get(currentRoom);
+    if (!game) return;
+
+    if (!isRoomOwner(game, socket.id)) {
+      socket.emit('error-msg', { message: 'Seul le propriétaire de la room peut expulser un joueur.' });
+      return;
+    }
+    if (game.state !== 'waiting') {
+      socket.emit('error-msg', { message: 'Impossible d\'expulser un joueur après le démarrage.' });
+      return;
+    }
+
+    const requesterPosition = game.getPlayerPosition(socket.id);
+    const targetPosition = sanitizePosition(data.position);
+    if (!targetPosition) {
+      socket.emit('error-msg', { message: 'Position invalide.' });
+      return;
+    }
+    if (targetPosition === requesterPosition) {
+      socket.emit('error-msg', { message: 'Tu ne peux pas t\'expulser toi-même.' });
+      return;
+    }
+
+    const targetPlayer = game.players[targetPosition];
+    if (!targetPlayer) {
+      socket.emit('error-msg', { message: 'Aucun joueur à cette position.' });
+      return;
+    }
+
+    const targetSocketId = targetPlayer.id;
+    const targetName = targetPlayer.name || positionLabelFr(targetPosition);
+    const targetWasBot = targetPlayer.isBot === true;
+    game.removePlayer(targetSocketId);
+
+    if (!targetWasBot) {
+      const targetSocket = io.sockets.sockets.get(targetSocketId);
+      if (targetSocket) targetSocket.leave(currentRoom);
+      io.to(targetSocketId).emit('kicked-from-room', {
+        roomId: currentRoom,
+        position: targetPosition,
+        by: playerName || 'Le créateur'
+      });
+    }
+
+    broadcastMessage(currentRoom, `${targetName} a été expulsé par le créateur (${positionLabelFr(targetPosition)}).`, 'warning');
+    broadcastGameState(currentRoom);
+    touchRoom(currentRoom);
+    updatePhantomLobbyState(currentRoom, game);
+  });
+
   // Changer de place dans la salle d'attente : vers n'importe quel siège libre.
   // Interdit une fois la partie lancée (les mains sont attachées aux sièges).
   on('change-seat', (data) => {
