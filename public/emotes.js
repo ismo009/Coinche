@@ -51,6 +51,17 @@
     return known ? known.url : `/emotes/${id}.png`;
   }
 
+  function setEmoteImageSource(img, id) {
+    const pngUrl = emoteUrl(id);
+    const gifUrl = pngUrl.replace(/\.png(?=$|[?#])/i, '.gif');
+    if (gifUrl !== pngUrl) {
+      img.addEventListener('error', () => {
+        img.src = pngUrl;
+      }, { once: true });
+    }
+    img.src = gifUrl;
+  }
+
   function emoteLabel(id) {
     const known = emoteList && emoteList.find(e => e.id === id);
     return known ? known.label : id;
@@ -135,7 +146,7 @@
       item.title = emote.label;
       item.setAttribute('aria-label', `Emote ${emote.label}`);
       const img = document.createElement('img');
-      img.src = emote.url;
+      setEmoteImageSource(img, emote.id);
       img.alt = '';
       img.loading = 'lazy';
       img.decoding = 'async';
@@ -313,7 +324,7 @@
     const playerName = gameState?.players?.[position]?.name;
     el.setAttribute('aria-label', `${playerName || position} : ${emoteLabel(id)}`);
     const img = document.createElement('img');
-    img.src = emoteUrl(id);
+    setEmoteImageSource(img, id);
     img.alt = '';
     img.decoding = 'async';
     img.draggable = false;
