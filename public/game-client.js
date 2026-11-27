@@ -15,7 +15,7 @@ let currentTexturePack = 'Classic';
 let availableTexturePacks = ['Classic','Balatro'];
 
 // Trick collect animation (UX): highlight the winning card, then slide cards to the winner.
-const TRICK_COLLECT_DELAY_MS = 420;
+const TRICK_COLLECT_DELAY_MS = 500;
 const TRICK_COLLECT_ANIM_MS = 500;
 
 // Card play animation (hand -> center)
