@@ -488,8 +488,8 @@ function announcePlayResult(roomId, game, position, result) {
 }
 
 // Durées alignées sur les animations client (public/game-client.js).
-const BOT_TURN_DELAY_MS = 450;
-const BOT_AFTER_TRICK_DELAY_MS = 900;
+const BOT_TURN_DELAY_MS = 500;
+const BOT_AFTER_TRICK_DELAY_MS = 1000;
 const DEAL_ANIMATION_MS = 1500;
 
 function maybeProcessBotTurn(roomId) {
